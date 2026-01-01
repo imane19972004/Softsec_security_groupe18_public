@@ -4,10 +4,13 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import hpp from 'hpp';
 import dotenv from 'dotenv';
-
+import https from "https";
+import { errorHandler } from "./middlewares/errorHandler.js";
 import config from './config.js';
 import authRoutes from './routes/auth.routes.js';
 import notesRoutes from './routes/notes.routes.js';
+import { httpsOptions } from "./config/https.js";
+import { logger } from "./config/logger.js";
 
 dotenv.config();
 
@@ -29,12 +32,24 @@ app.use(
 app.get('/', (req, res) => {
   res.send('Server A - Secure Notes API');
 });
+
+app.get("/crash", (req, res) => {
+  throw new Error("Test error");
+});
+
+
 app.use('/auth', authRoutes);
 app.use('/notes', notesRoutes);
 
-// Start server
-app.listen(config.PORT, () => {
-  console.log(`Server A running on port ${config.PORT}`);
+app.use(errorHandler);
+app.use((req, res, next) => {
+  logger.info(`${req.method} ${req.originalUrl}`);
+  next();
+});
+
+https.createServer(httpsOptions, app).listen(config.PORT, () => {
+  logger.info(`Secure Server A running on port ${config.PORT}`);
+
 });
 
 export default app;

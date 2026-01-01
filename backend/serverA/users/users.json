@@ -1,0 +1,8 @@
+{
+  "test@example.com": {
+    "id": "21e13c09-20a2-4ef7-8783-0672c68531c0",
+    "email": "test@example.com",
+    "passwordHash": "$2b$12$wmUi37tdpqNnDWADI7oH3uh2SizZr7yuok.oHeF0wkbSGWGgrq12m",
+    "createdAt": "2025-12-25T17:56:56.189Z"
+  }
+}

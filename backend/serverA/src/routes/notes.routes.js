@@ -2,9 +2,17 @@ import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import noteService from '../../../shared/services/noteService.js';
 import { verifyToken } from '../../../shared/utils/crypto.js';
+import ReplicationService from '../../../shared/services/replicationService.js';
+
 import config from '../config.js';
 
 const router = express.Router();
+
+// Initialiser le service de réplication
+const replicationService = new ReplicationService(
+  process.env.PEER_SERVER_URL || 'http://localhost:3002',
+  process.env.REPLICATION_SECRET || 'shared-secret-change-in-production'
+);
 
 // Middleware to authenticate requests
 function auth(req, res, next) {
@@ -43,6 +51,11 @@ router.post('/', auth, (req, res) => {
       req.body.title,
       req.body.content
     );
+
+    // Répliquer vers l'autre serveur (asynchrone, non-bloquant)
+    replicationService.replicateCreate(note)
+      .catch(err => console.error('Replication warning:', err.message));
+
     res.status(201).json(note);
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
@@ -51,9 +64,19 @@ router.post('/', auth, (req, res) => {
 
 router.put('/:id', auth, (req, res) => {
   try {
-    res.json(
-      noteService.updateNote(config.DATA_DIR, req.user.id, req.params.id, req.body.content)
+    // Mettre à jour localement
+    const note = noteService.updateNote(
+      config.DATA_DIR, 
+      req.user.id, 
+      req.params.id, 
+      req.body.content
     );
+
+    // Répliquer la modification
+    replicationService.replicateUpdate(note)
+      .catch(err => console.error('Replication warning:', err.message));
+
+    res.json(note);
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
   }
@@ -66,6 +89,16 @@ router.delete('/:id', auth, (req, res) => {
   } catch (err) {
     res.status(err.statusCode || 500).json({ error: err.message });
   }
+});
+
+// Endpoint pour vérifier la santé de la réplication
+router.get('/system/replication-status', auth, async (req, res) => {
+  const health = await replicationService.checkPeerHealth();
+  res.json({
+    peerServer: process.env.PEER_SERVER_URL || 'http://localhost:3002',
+    status: health.healthy ? 'connected' : 'disconnected',
+    details: health
+  });
 });
 
 export default router;
