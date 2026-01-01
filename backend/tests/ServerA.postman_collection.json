@@ -1,0 +1,667 @@
+{
+  "info": {
+    "name": "Server A Notes API Tests Collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "45013133-3c50373d-047d-4041-94f5-9de4d364b508",
+    "description": "Collection Postman avec tests automatisés pour les endpoints d'authentification et de notes, incluant les scénarios d'erreur"
+  },
+  "item": [
+    {
+      "name": "Register User",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "url": { "raw": "{{BASE_URL}}/auth/register", "host": ["{{BASE_URL}}"],"path": ["auth","register"]},
+        "body": { "mode": "raw","raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"P@ssw0rd2025!\"\n}"}
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const name = pm.info.requestName || \"\";",
+              "const isNegativeName = /(Invalid|Unauthorized|Wrong|Already Exists)/i.test(name);",
+              "",
+              "pm.test(\"Status code is expected (2xx for success, 4xx for negative)\", function () {",
+              "    const code = pm.response.code;",
+              "    if (/(Unauthorized)/i.test(name)) {",
+              "        pm.expect(code).to.eql(401);",
+              "    } else if (isNegativeName) {",
+              "        pm.expect(code).to.be.within(400, 499);",
+              "    } else {",
+              "        pm.expect(code).to.be.within(200, 299);",
+              "    }",
+              "});",
+              "",
+              "pm.test(\"Response time is under 2000ms\", function () {",
+              "    pm.expect(pm.response.responseTime).to.be.below(2000);",
+              "});",
+              "",
+              "pm.test(\"If JSON, body is valid JSON\", function () {",
+              "    const ct = pm.response.headers.get('Content-Type') || \"\";",
+              "    if (ct.includes('application/json')) {",
+              "        pm.expect(function () {",
+              "            pm.response.json();",
+              "        }).to.not.throw();",
+              "    }",
+              "});",
+              "",
+              "// Endpoint-specific tests: Register User (success)",
+              "if (!isNegativeName) {",
+              "    pm.test(\"Register User: response has user id or email\", function () {",
+              "        const json = pm.response.json();",
+              "        pm.expect(json).to.be.an('object');",
+              "        pm.expect(json).to.satisfy(obj => obj.id || obj.userId || obj.email, 'id/userId/email should be present');",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Register User - Already Exists",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "url": {"raw": "{{BASE_URL}}/auth/register","host": ["{{BASE_URL}}"],"path": ["auth","register"]},
+        "body": {"mode": "raw","raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}"}
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const name = pm.info.requestName || \"\";",
+              "const isNegativeName = /(Invalid|Unauthorized|Wrong|Already Exists)/i.test(name);",
+              "",
+              "pm.test(\"Status code is expected (2xx for success, 4xx for negative)\", function () {",
+              "    const code = pm.response.code;",
+              "    if (/(Unauthorized)/i.test(name)) {",
+              "        pm.expect(code).to.eql(401);",
+              "    } else if (isNegativeName) {",
+              "        pm.expect(code).to.be.within(400, 499);",
+              "    } else {",
+              "        pm.expect(code).to.be.within(200, 299);",
+              "    }",
+              "});",
+              "",
+              "pm.test(\"Response time is under 2000ms\", function () {",
+              "    pm.expect(pm.response.responseTime).to.be.below(2000);",
+              "});",
+              "",
+              "pm.test(\"If JSON, body is valid JSON\", function () {",
+              "    const ct = pm.response.headers.get('Content-Type') || \"\";",
+              "    if (ct.includes('application/json')) {",
+              "        pm.expect(function () {",
+              "            pm.response.json();",
+              "        }).to.not.throw();",
+              "    }",
+              "});",
+              "",
+              "// Endpoint-specific tests: Register User - Already Exists (negative)",
+              "pm.test(\"Register User - Already Exists: has error message\", function () {",
+              "    const json = pm.response.json();",
+              "    pm.expect(json).to.be.an('object');",
+              "    pm.expect(json).to.have.any.keys('error', 'message');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Login User",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type","value": "application/json"}],
+        "url": {"raw": "{{BASE_URL}}/auth/login","host": ["{{BASE_URL}}"],"path": ["auth","login"]},
+        "body": {"mode": "raw","raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"P@ssw0rd2025!\"\n}"}
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const name = pm.info.requestName || \"\";",
+              "const isNegativeName = /(Invalid|Unauthorized|Wrong|Already Exists)/i.test(name);",
+              "",
+              "pm.test(\"Status code is expected (2xx for success, 4xx for negative)\", function () {",
+              "    const code = pm.response.code;",
+              "    if (/(Unauthorized)/i.test(name)) {",
+              "        pm.expect(code).to.eql(401);",
+              "    } else if (isNegativeName) {",
+              "        pm.expect(code).to.be.within(400, 499);",
+              "    } else {",
+              "        pm.expect(code).to.be.within(200, 299);",
+              "    }",
+              "});",
+              "",
+              "pm.test(\"Response time is under 2000ms\", function () {",
+              "    pm.expect(pm.response.responseTime).to.be.below(2000);",
+              "});",
+              "",
+              "pm.test(\"If JSON, body is valid JSON\", function () {",
+              "    const ct = pm.response.headers.get('Content-Type') || \"\";",
+              "    if (ct.includes('application/json')) {",
+              "        pm.expect(function () {",
+              "            pm.response.json();",
+              "        }).to.not.throw();",
+              "    }",
+              "});",
+              "",
+              "// Endpoint-specific tests: Login User (success)",
+              "if (!isNegativeName) {",
+              "    pm.test(\"Login User: response has token and saves it\", function () {",
+              "        const json = pm.response.json();",
+              "        pm.expect(json).to.be.an('object');",
+              "        pm.expect(json).to.have.property('token').that.is.a('string').and.is.not.empty;",
+              "        pm.environment.set('JWT_TOKEN', json.token);",
+              "        pm.collectionVariables.set('JWT_TOKEN', json.token);",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Login User - Wrong Password",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type","value": "application/json"}],
+        "url": {"raw": "{{BASE_URL}}/auth/login","host": ["{{BASE_URL}}"],"path": ["auth","login"]},
+        "body": {"mode": "raw","raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"wrongpassword\"\n}"}
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const name = pm.info.requestName || \"\";",
+              "const isNegativeName = /(Invalid|Unauthorized|Wrong|Already Exists)/i.test(name);",
+              "",
+              "pm.test(\"Status code is expected (2xx for success, 4xx for negative)\", function () {",
+              "    const code = pm.response.code;",
+              "    if (/(Unauthorized)/i.test(name)) {",
+              "        pm.expect(code).to.eql(401);",
+              "    } else if (isNegativeName) {",
+              "        pm.expect(code).to.be.within(400, 499);",
+              "    } else {",
+              "        pm.expect(code).to.be.within(200, 299);",
+              "    }",
+              "});",
+              "",
+              "pm.test(\"Response time is under 2000ms\", function () {",
+              "    pm.expect(pm.response.responseTime).to.be.below(2000);",
+              "});",
+              "",
+              "pm.test(\"If JSON, body is valid JSON\", function () {",
+              "    const ct = pm.response.headers.get('Content-Type') || \"\";",
+              "    if (ct.includes('application/json')) {",
+              "        pm.expect(function () {",
+              "            pm.response.json();",
+              "        }).to.not.throw();",
+              "    }",
+              "});",
+              "",
+              "// Endpoint-specific tests: Login User - Wrong Password (negative)",
+              "pm.test(\"Login User - Wrong Password: error message present\", function () {",
+              "    const json = pm.response.json();",
+              "    pm.expect(json).to.be.an('object');",
+              "    pm.expect(json).to.have.any.keys('error', 'message');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Create Note",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{JWT_TOKEN}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"Ma première note\",\n  \"content\": \"Contenu de la note.\"\n}"
+        },
+        "url": { "raw": "{{BASE_URL}}/notes", "host": ["{{BASE_URL}}"], "path": ["notes"] }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Create note status 201', function() {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "var jsonData = pm.response.json();",
+              "pm.environment.set('NOTE_ID', jsonData.id);",
+              "pm.test('Note ID exists', function() {",
+              "    pm.expect(jsonData).to.have.property('id');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get All Notes",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{JWT_TOKEN}}" }],
+        "url": {"raw": "{{BASE_URL}}/notes","host": ["{{BASE_URL}}"],"path": ["notes"]}
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Get all notes status 200', function() {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test('Response is array', function() {",
+              "    var jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get Note by ID",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{JWT_TOKEN}}" }],
+        "url": {"raw": "{{BASE_URL}}/notes/{{NOTE_ID}}","host": ["{{BASE_URL}}"],"path": ["notes","{{NOTE_ID}}"]}
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const name = pm.info.requestName || \"\";",
+              "const isNegativeName = /(Invalid|Unauthorized|Wrong|Already Exists)/i.test(name);",
+              "",
+              "pm.test(\"Status code is expected (2xx for success, 4xx for negative)\", function () {",
+              "    const code = pm.response.code;",
+              "    if (/(Unauthorized)/i.test(name)) {",
+              "        pm.expect(code).to.eql(401);",
+              "    } else if (isNegativeName) {",
+              "        pm.expect(code).to.be.within(400, 499);",
+              "    } else {",
+              "        pm.expect(code).to.be.within(200, 299);",
+              "    }",
+              "});",
+              "",
+              "pm.test(\"Response time is under 2000ms\", function () {",
+              "    pm.expect(pm.response.responseTime).to.be.below(2000);",
+              "});",
+              "",
+              "pm.test(\"If JSON, body is valid JSON\", function () {",
+              "    const ct = pm.response.headers.get('Content-Type') || \"\";",
+              "    if (ct.includes('application/json')) {",
+              "        pm.expect(function () {",
+              "            pm.response.json();",
+              "        }).to.not.throw();",
+              "    }",
+              "});",
+              "",
+              "// Endpoint-specific tests: Get Note by ID",
+              "if (!isNegativeName) {",
+              "    pm.test(\"Get Note by ID: response is object and id matches NOTE_ID when present\", function () {",
+              "        const json = pm.response.json();",
+              "        pm.expect(json).to.be.an('object');",
+              "        const noteIdVar = pm.collectionVariables.get('NOTE_ID');",
+              "        if (json.id && noteIdVar) {",
+              "            pm.expect(String(json.id)).to.eql(String(noteIdVar));",
+              "        }",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get Note by Invalid ID",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{JWT_TOKEN}}" }],
+        "url": {"raw": "{{BASE_URL}}/notes/{{INVALID_NOTE_ID}}","host": ["{{BASE_URL}}"],"path": ["notes","{{INVALID_NOTE_ID}}"]}
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const name = pm.info.requestName || \"\";",
+              "const isNegativeName = /(Invalid|Unauthorized|Wrong|Already Exists)/i.test(name);",
+              "",
+              "pm.test(\"Status code is expected (2xx for success, 4xx for negative)\", function () {",
+              "    const code = pm.response.code;",
+              "    if (/(Unauthorized)/i.test(name)) {",
+              "        pm.expect(code).to.eql(401);",
+              "    } else if (isNegativeName) {",
+              "        pm.expect(code).to.be.within(400, 499);",
+              "    } else {",
+              "        pm.expect(code).to.be.within(200, 299);",
+              "    }",
+              "});",
+              "",
+              "pm.test(\"Response time is under 2000ms\", function () {",
+              "    pm.expect(pm.response.responseTime).to.be.below(2000);",
+              "});",
+              "",
+              "pm.test(\"If JSON, body is valid JSON\", function () {",
+              "    const ct = pm.response.headers.get('Content-Type') || \"\";",
+              "    if (ct.includes('application/json')) {",
+              "        pm.expect(function () {",
+              "            pm.response.json();",
+              "        }).to.not.throw();",
+              "    }",
+              "});",
+              "",
+              "// Endpoint-specific tests: Get Note by Invalid ID (negative)",
+              "pm.test(\"Get Note by Invalid ID: error message present\", function () {",
+              "    const json = pm.response.json();",
+              "    pm.expect(json).to.be.an('object');",
+              "    pm.expect(json).to.have.any.keys('error', 'message');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Update Note",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {"key": "Content-Type","value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{JWT_TOKEN}}"}
+        ],
+        "url": {"raw": "{{BASE_URL}}/notes/{{NOTE_ID}}","host": ["{{BASE_URL}}"],"path": ["notes","{{NOTE_ID}}"]},
+        "body": {"mode": "raw","raw": "{\n  \"title\": \"Updated title\",\n  \"content\": \"Updated content\"\n}"}
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const name = pm.info.requestName || \"\";",
+              "const isNegativeName = /(Invalid|Unauthorized|Wrong|Already Exists)/i.test(name);",
+              "",
+              "pm.test(\"Status code is expected (2xx for success, 4xx for negative)\", function () {",
+              "    const code = pm.response.code;",
+              "    if (/(Unauthorized)/i.test(name)) {",
+              "        pm.expect(code).to.eql(401);",
+              "    } else if (isNegativeName) {",
+              "        pm.expect(code).to.be.within(400, 499);",
+              "    } else {",
+              "        pm.expect(code).to.be.within(200, 299);",
+              "    }",
+              "});",
+              "",
+              "pm.test(\"Response time is under 2000ms\", function () {",
+              "    pm.expect(pm.response.responseTime).to.be.below(2000);",
+              "});",
+              "",
+              "pm.test(\"If JSON, body is valid JSON\", function () {",
+              "    const ct = pm.response.headers.get('Content-Type') || \"\";",
+              "    if (ct.includes('application/json')) {",
+              "        pm.expect(function () {",
+              "            pm.response.json();",
+              "        }).to.not.throw();",
+              "    }",
+              "});",
+              "",
+              "// Endpoint-specific tests: Update Note (success)",
+              "if (!isNegativeName) {",
+              "    pm.test(\"Update Note: updated note or success message present\", function () {",
+              "        const json = pm.response.json();",
+              "        pm.expect(json).to.be.an('object');",
+              "        pm.expect(json).to.satisfy(obj => obj.id || obj.note || obj.message, 'id/note/message should be present');",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Update Note Invalid ID",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {"key": "Content-Type","value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{JWT_TOKEN}}"}
+      ],
+        "url": {"raw": "{{BASE_URL}}/notes/{{INVALID_NOTE_ID}}","host": ["{{BASE_URL}}"],"path": ["notes","{{INVALID_NOTE_ID}}"]},
+        "body": {"mode": "raw","raw": "{\n  \"title\": \"Updated title\",\n  \"content\": \"Updated content\"\n}"}
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const name = pm.info.requestName || \"\";",
+              "const isNegativeName = /(Invalid|Unauthorized|Wrong|Already Exists)/i.test(name);",
+              "",
+              "pm.test(\"Status code is expected (2xx for success, 4xx for negative)\", function () {",
+              "    const code = pm.response.code;",
+              "    if (/(Unauthorized)/i.test(name)) {",
+              "        pm.expect(code).to.eql(401);",
+              "    } else if (isNegativeName) {",
+              "        pm.expect(code).to.be.within(400, 499);",
+              "    } else {",
+              "        pm.expect(code).to.be.within(200, 299);",
+              "    }",
+              "});",
+              "",
+              "pm.test(\"Response time is under 2000ms\", function () {",
+              "    pm.expect(pm.response.responseTime).to.be.below(2000);",
+              "});",
+              "",
+              "pm.test(\"If JSON, body is valid JSON\", function () {",
+              "    const ct = pm.response.headers.get('Content-Type') || \"\";",
+              "    if (ct.includes('application/json')) {",
+              "        pm.expect(function () {",
+              "            pm.response.json();",
+              "        }).to.not.throw();",
+              "    }",
+              "});",
+              "",
+              "// Endpoint-specific tests: Update Note Invalid ID (negative)",
+              "pm.test(\"Update Note Invalid ID: error message present\", function () {",
+              "    const json = pm.response.json();",
+              "    pm.expect(json).to.be.an('object');",
+              "    pm.expect(json).to.have.any.keys('error', 'message');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Delete Note",
+      "request": {
+        "method": "DELETE",
+        "header": [{"key": "Authorization", "value": "Bearer {{JWT_TOKEN}}"}],
+        "url": {"raw": "{{BASE_URL}}/notes/{{NOTE_ID}}","host": ["{{BASE_URL}}"],"path": ["notes","{{NOTE_ID}}"]}
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const name = pm.info.requestName || \"\";",
+              "const isNegativeName = /(Invalid|Unauthorized|Wrong|Already Exists)/i.test(name);",
+              "",
+              "pm.test(\"Status code is expected (2xx for success, 4xx for negative)\", function () {",
+              "    const code = pm.response.code;",
+              "    if (/(Unauthorized)/i.test(name)) {",
+              "        pm.expect(code).to.eql(401);",
+              "    } else if (isNegativeName) {",
+              "        pm.expect(code).to.be.within(400, 499);",
+              "    } else {",
+              "        pm.expect(code).to.be.within(200, 299);",
+              "    }",
+              "});",
+              "",
+              "pm.test(\"Response time is under 2000ms\", function () {",
+              "    pm.expect(pm.response.responseTime).to.be.below(2000);",
+              "});",
+              "",
+              "pm.test(\"If JSON, body is valid JSON\", function () {",
+              "    const ct = pm.response.headers.get('Content-Type') || \"\";",
+              "    if (ct.includes('application/json')) {",
+              "        pm.expect(function () {",
+              "            pm.response.json();",
+              "        }).to.not.throw();",
+              "    }",
+              "});",
+              "",
+              "// Endpoint-specific tests: Delete Note (success)",
+              "if (!isNegativeName) {",
+              "    pm.test(\"Delete Note: success indicator and NOTE_ID cleared\", function () {",
+              "        let body = null;",
+              "        try { body = pm.response.json(); } catch (e) {}",
+              "        if (body && typeof body === 'object') {",
+              "            pm.expect(body).to.satisfy(obj => obj.success || obj.deleted || obj.message, 'success/deleted/message should be present');",
+              "        }",
+              "        pm.collectionVariables.unset('NOTE_ID');",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Delete Note Invalid ID",
+      "request": {
+        "method": "DELETE",
+        "header": [{"key": "Authorization", "value": "Bearer {{JWT_TOKEN}}"}],
+        "url": {"raw": "{{BASE_URL}}/notes/{{INVALID_NOTE_ID}}","host": ["{{BASE_URL}}"],"path": ["notes","{{INVALID_NOTE_ID}}"]}
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const name = pm.info.requestName || \"\";",
+              "const isNegativeName = /(Invalid|Unauthorized|Wrong|Already Exists)/i.test(name);",
+              "",
+              "pm.test(\"Status code is expected (2xx for success, 4xx for negative)\", function () {",
+              "    const code = pm.response.code;",
+              "    if (/(Unauthorized)/i.test(name)) {",
+              "        pm.expect(code).to.eql(401);",
+              "    } else if (isNegativeName) {",
+              "        pm.expect(code).to.be.within(400, 499);",
+              "    } else {",
+              "        pm.expect(code).to.be.within(200, 299);",
+              "    }",
+              "});",
+              "",
+              "pm.test(\"Response time is under 2000ms\", function () {",
+              "    pm.expect(pm.response.responseTime).to.be.below(2000);",
+              "});",
+              "",
+              "pm.test(\"If JSON, body is valid JSON\", function () {",
+              "    const ct = pm.response.headers.get('Content-Type') || \"\";",
+              "    if (ct.includes('application/json')) {",
+              "        pm.expect(function () {",
+              "            pm.response.json();",
+              "        }).to.not.throw();",
+              "    }",
+              "});",
+              "",
+              "// Endpoint-specific tests: Delete Note Invalid ID (negative)",
+              "pm.test(\"Delete Note Invalid ID: error message present\", function () {",
+              "    const json = pm.response.json();",
+              "    pm.expect(json).to.be.an('object');",
+              "    pm.expect(json).to.have.any.keys('error', 'message');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Unauthorized Get Notes",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {"raw": "{{BASE_URL}}/notes","host": ["{{BASE_URL}}"],"path": ["notes"]}
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const name = pm.info.requestName || \"\";",
+              "const isNegativeName = /(Invalid|Unauthorized|Wrong|Already Exists)/i.test(name);",
+              "",
+              "pm.test(\"Status code is expected (2xx for success, 4xx for negative)\", function () {",
+              "    const code = pm.response.code;",
+              "    if (/(Unauthorized)/i.test(name)) {",
+              "        pm.expect(code).to.eql(401);",
+              "    } else if (isNegativeName) {",
+              "        pm.expect(code).to.be.within(400, 499);",
+              "    } else {",
+              "        pm.expect(code).to.be.within(200, 299);",
+              "    }",
+              "});",
+              "",
+              "pm.test(\"Response time is under 2000ms\", function () {",
+              "    pm.expect(pm.response.responseTime).to.be.below(2000);",
+              "});",
+              "",
+              "pm.test(\"If JSON, body is valid JSON\", function () {",
+              "    const ct = pm.response.headers.get('Content-Type') || \"\";",
+              "    if (ct.includes('application/json')) {",
+              "        pm.expect(function () {",
+              "            pm.response.json();",
+              "        }).to.not.throw();",
+              "    }",
+              "});",
+              "",
+              "// Endpoint-specific tests: Unauthorized Get Notes",
+              "pm.test(\"Unauthorized Get Notes: status is 401 and error message present\", function () {",
+              "    pm.expect(pm.response.code).to.eql(401);",
+              "    const json = (function () { try { return pm.response.json(); } catch (e) { return {}; } })();",
+              "    if (Object.keys(json).length) {",
+              "        pm.expect(json).to.have.any.keys('error', 'message');",
+              "    }",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {"key": "BASE_URL","value": ""},
+    {"key": "JWT_TOKEN","value": ""},
+    {"key": "NOTE_ID","value": ""},
+    {"key": "INVALID_NOTE_ID","value": ""}
+  ]
+}

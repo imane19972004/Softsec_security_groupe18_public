@@ -1,0 +1,31 @@
+{
+  "id": "091cb4f3-9db4-4be7-b4d9-93bffadb704b",
+  "name": "Server A Environment",
+  "values": [
+    {
+      "key": "BASE_URL",
+      "value": "http://localhost:3001",
+      "enabled": true,
+      "type": "default"
+    },
+    {
+      "key": "JWT_TOKEN",
+      "value": "",
+      "enabled": true,
+      "type": "secret"
+    },
+    {
+      "key": "NOTE_ID",
+      "value": "",
+      "enabled": true,
+      "type": "default"
+    },
+    {
+      "key": "INVALID_NOTE_ID",
+      "value": "00000000-0000-0000-0000-000000000000",
+      "enabled": true,
+      "type": "default"
+    }
+  ],
+  "_postman_variable_scope": "environment"
+}
