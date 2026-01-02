@@ -19,7 +19,7 @@ const app = express();
 // Middlewares for security and parsing
 app.use(helmet());
 app.use(cors({ origin: config.FRONTEND_ORIGIN }));
-app.use(express.json({ limit: '10kb' }));
+app.use(express.json({ limit: '30kb' }));
 app.use(hpp());
 app.use(
   rateLimit({
@@ -47,7 +47,7 @@ app.use((req, res, next) => {
   next();
 });
 
-https.createServer(httpsOptions, app).listen(config.PORT, () => {
+https.createServer(httpsOptions, app).listen(config.PORT,"0.0.0.0", () => {
   logger.info(`Secure Server A running on port ${config.PORT}`);
 
 });

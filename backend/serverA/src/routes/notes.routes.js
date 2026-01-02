@@ -3,6 +3,11 @@ import { v4 as uuidv4 } from 'uuid';
 import noteService from '../../../shared/services/noteService.js';
 import { verifyToken } from '../../../shared/utils/crypto.js';
 import ReplicationService from '../../../shared/services/replicationService.js';
+import { 
+  validateCreateNote, 
+  validateUpdateNote, 
+  validateNoteId 
+} from '../validators/noteValidators.js';
 
 import config from '../config.js';
 
@@ -29,12 +34,14 @@ function auth(req, res, next) {
   }
 }
 
-// CRUD routes for notes
+// CRUD routes for notes avec validation 
+
+//liste toutes les notes
 router.get('/', auth, (req, res) => {
   res.json(noteService.listNotes(config.DATA_DIR, req.user.id));
 });
 
-router.get('/:id', auth, (req, res) => {
+router.get('/:id', auth, validateNoteId,(req, res) => {
   try {
     res.json(noteService.getNote(config.DATA_DIR, req.user.id, req.params.id));
   } catch (err) {
@@ -42,7 +49,9 @@ router.get('/:id', auth, (req, res) => {
   }
 });
 
-router.post('/', auth, (req, res) => {
+
+// Crée une nouvelle note avec validation
+router.post('/', auth,validateCreateNote, (req, res) => {
   try {
     const note = noteService.createNote(
       config.DATA_DIR,
@@ -62,8 +71,14 @@ router.post('/', auth, (req, res) => {
   }
 });
 
-router.put('/:id', auth, (req, res) => {
+// Met à jour une note avec validation
+router.put('/:id', auth,validateUpdateNote, (req, res) => {
   try {
+    // Vérifier la longueur du contenu
+    const MAX_CONTENT_LENGTH = 10000; // on peut ajuster la limite
+    if (req.body.content.length > MAX_CONTENT_LENGTH) {
+      return res.status(400).json({ error: `Validation: content too long (max ${MAX_CONTENT_LENGTH} chars)` });
+    }
     // Mettre à jour localement
     const note = noteService.updateNote(
       config.DATA_DIR, 
@@ -72,7 +87,7 @@ router.put('/:id', auth, (req, res) => {
       req.body.content
     );
 
-    // Répliquer la modification
+    // Répliquer la modification (asynchrone)
     replicationService.replicateUpdate(note)
       .catch(err => console.error('Replication warning:', err.message));
 
@@ -82,7 +97,8 @@ router.put('/:id', auth, (req, res) => {
   }
 });
 
-router.delete('/:id', auth, (req, res) => {
+// Supprime une note avec validation
+router.delete('/:id', auth, validateNoteId,(req, res) => {
   try {
     noteService.deleteNote(config.DATA_DIR, req.user.id, req.params.id);
     res.status(204).end();
