@@ -1,0 +1,19 @@
+{
+  "name": "secure-notes-frontend",
+  "version": "1.0.0",
+  "engines": {
+    "node": ">=16.14.0"
+  },
+  "private": true,
+  "scripts": {
+    "start": "node js/server.js",
+    "dev": "nodemon js/server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "http-proxy-middleware": "^2.0.6"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
+  }
+}

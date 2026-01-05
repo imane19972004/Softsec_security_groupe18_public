@@ -1,6 +1,11 @@
 // backend/shared/services/replicationService.js
+import fs from 'fs';
+import path from 'path';
 import crypto from 'crypto';
-
+import https from 'https';
+import fetch from 'node-fetch';
+import { logger } from '../config/logger.js';
+import { fileURLToPath } from 'url';
 /**
  * Service de réplication pour synchroniser les notes entre serveurs
  */
@@ -13,79 +18,67 @@ class ReplicationService {
   /**
    * Calculer le checksum pour vérifier l'intégrité
    */
-  calculateChecksum(note) {
-    const data = JSON.stringify({
-      id: note.id,
-      ownerId: note.ownerId,
-      title: note.title,
-      content: note.content,
-      updatedAt: note.updatedAt
-    });
-    
-    return crypto.createHash('sha256').update(data).digest('hex');
+  calculateChecksum(payload) {
+    return crypto
+      .createHash('sha256')
+      .update(JSON.stringify(payload))
+      .digest('hex');
   }
 
   /**
-   * Envoyer une action de réplication au serveur pair
-   * 
-   * @param {string} action - 'create', 'update', ou 'delete'
-   * @param {object} note - Objet note à répliquer
+   * Répliquer une action vers le serveur pair
    */
-  async replicate(action, note) {
+  async replicate(entity, action, payload) {
     try {
-      // Calculer le checksum pour l'intégrité
-      const checksum = this.calculateChecksum(note);
+      const checksum = this.calculateChecksum(payload);
 
-      // Préparer la requête
-      const response = await fetch(`${this.peerServerUrl}/sync`, {
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = path.dirname(__filename);
+
+      const caCertPath = path.join(__dirname, '../certs/cert.pem');
+
+      const agent = new https.Agent({
+        ca: fs.readFileSync(caCertPath)
+      });
+
+      const response = await fetch(`${this.peerServerUrl}/replication/sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Replication-Auth': this.replicationSecret
+          'x-replication-auth': this.replicationSecret
         },
         body: JSON.stringify({
+          entity,
           action,
-          note,
+          payload,
           checksum
-        })
+        }),
+        agent
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(`Replication failed: ${error.error}`);
+        const err = await response.json();
+        throw new Error(err.error || 'Replication failed');
       }
 
-      const result = await response.json();
-      console.log(` Replicated ${action} to peer server:`, note.id);
-      
-      return result;
+      logger.info(`[Replication] ${entity}:${action}`);
     } catch (err) {
-      console.error(` Replication error (${action}):`, err.message);
-      // Ne pas bloquer l'opération principale si la réplication échoue
-      // En production, on pourrait mettre en queue pour réessayer
-      return { success: false, error: err.message };
+      logger.error(`[Replication] Error ${entity}:${action} - ${err.message}`);
     }
   }
 
-  /**
-   * Répliquer une création de note
-   */
-  async replicateCreate(note) {
-    return this.replicate('create', note);
+  replicateUserCreate(user) {
+    return this.replicate('user', 'create', user);
   }
 
-  /**
-   * Répliquer une mise à jour de note
-   */
-  async replicateUpdate(note) {
-    return this.replicate('update', note);
+  replicateNoteCreate(note) {
+    return this.replicate('note', 'create', note);
   }
-
-  /**
-   * Répliquer une suppression de note
-  */
-  async replicateDelete(note) {
-    return this.replicate('delete', note);
+  replicateNoteUpdate(note) {
+    return this.replicate('note', 'update', note);
+  }
+  replicateNoteDelete(note) {
+    return this.replicate('note', 'delete', note);
   }
 
   /**

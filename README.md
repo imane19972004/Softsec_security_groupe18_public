@@ -7,7 +7,7 @@ Architecture distribuée : deux serveurs Node.js (A et B), un frontend web et un
 
 Chaque dossier backend correspond à un service Node.js indépendant.
 
-### Installation
+### [Installation](docs/SETUP.md)
 
 ```bash
 cd backend/serverA
@@ -18,12 +18,16 @@ npm install
 
 cd ../shared
 npm install
-
+```
 
 ## HTTPS et certificats TLS
 
-Le backend utilise HTTPS avec des certificats TLS auto-signés générés localement à l’aide d’OpenSSL.
+Le backend utilise HTTPS avec des certificats TLS pour le développement local.
 
-Les certificats sont stockés dans le dossier `cert/`, qui est volontairement exclu du dépôt Git (`.gitignore`) pour des raisons de sécurité.
+Les certificats doivent être créés localement et placés dans `/shared/certs/` (ce dossier est ignoré par Git via `.gitignore`).
 
-Chaque développeur doit générer ses propres certificats localement avant de lancer les serveurs.
+Générez-les avec les scripts fournis.
+
+## Ressources
+1. [Script pour la génération des PEM](scripts/generate-certs.sh)
+2. [Setup](docs/SETUP.md)

@@ -1,38 +1,65 @@
-﻿// Server B - Application Entry Point
+﻿/**
+ * Server B - Application Entry Point
+ * 
+ * Serveur de réplication sécurisée pour notes
+ * Synchronise les données avec Server A
+ */
+// Charger les variables d'environnement avant tout
+import dotenv from 'dotenv';
+dotenv.config();
 
+import https from 'https';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import hpp from 'hpp';
-import dotenv from 'dotenv';
-import crypto from 'crypto';
 
-import authRoutes from '../../serverA/src/routes/auth.routes.js';
-import notesRoutes from '../../serverA/src/routes/notes.routes.js';
-import noteService from '../../shared/services/noteService.js';
+// Configuration et services
+import config from './config.js';
+import { httpsOptions, logger } from '../../shared/config/index.js';
+import createNoteService from '../../shared/services/note.service.js';
+import { createUserRepository } from '../../shared/repositories/user.repository.js';
 
-dotenv.config();
+// Controllers et routes
+import { createReplicationController } from './controllers/replication.controller.js';
+import { createReplicationRoutes } from './routes/replication.routes.js';
 
-const app = express();
+// Middlewares
+import { replicationAuthMiddleware } from './middlewares/replicationAuth.middleware.js';
+import errorHandler from '../../shared/middlewares/error.middleware.js';
 
-// Configuration pour Server B
-const config = {
-  PORT: process.env.PORT_B || 3002,
-  FRONTEND_ORIGIN: process.env.FRONTEND_ORIGIN || 'http://localhost:3000',
-  RATE_LIMIT_WINDOW: 15 * 60 * 1000,
-  RATE_LIMIT_MAX: 100,
-  DATA_DIR: './data_serverB',
-  // Secret partagé pour l'authentification inter-serveurs
-  REPLICATION_SECRET: process.env.REPLICATION_SECRET || 'shared-secret-change-in-production',
-  // URL de l'autre serveur
-  PEER_SERVER_URL: process.env.PEER_SERVER_URL || 'http://localhost:3001'
+// Services
+import { createReplicationService } from './services/replication.service.js';
+import { tokenBlacklistService } from './services/tokenBlacklist.service.js';
+
+
+// Valider au chargement
+config.validateEnvironment();
+
+// Initialiser les services
+const noteService = createNoteService(config.DATA_DIR);
+const userRepository = createUserRepository(config.DATA_DIR);
+
+const userService = {
+  replicateCreate: (user) => userRepository.replicateUser(user)
 };
 
-// Middlewares de sécurité
+const replicationService = createReplicationService(noteService, userService);
+
+const replicationController = createReplicationController(replicationService);
+const replicationAuthMiddlewareInstance = replicationAuthMiddleware(config);
+
+// Démarrer la blacklist automatique des tokens
+tokenBlacklistService.startAutoCleanup(60 * 60 * 1000); // Toutes les heures
+
+// Créer l'application Express
+const app = express();
+
+// MIDDLEWARES DE SÉCURITÉ
 app.use(helmet());
 app.use(cors({ origin: config.FRONTEND_ORIGIN }));
-app.use(express.json({ limit: '30kb' }));
+app.use(express.json({ limit: '10kb' }));
 app.use(hpp());
 app.use(
   rateLimit({
@@ -41,155 +68,66 @@ app.use(
   })
 );
 
-// Routes standards (identiques à Server A)
+// Logger les requêtes entrantes
+app.use((req, res, next) => {
+  const loggedUrl = req.originalUrl.split('?')[0];
+  logger.info(`${req.method} ${loggedUrl}`);
+  next();
+});
+
+// ROUTES
 app.get('/', (req, res) => {
   res.send('Server B - Secure Notes API (Replica)');
 });
-app.use('/auth', authRoutes);
-app.use('/notes', notesRoutes);
 
-// ============================================
-// ENDPOINT DE RÉPLICATION
-// ============================================
+// Routes de réplication
+const replicationRoutes = createReplicationRoutes(
+  replicationController,
+  replicationAuthMiddlewareInstance
+);
+app.use('/replication', replicationRoutes);
 
-/**
- * Middleware d'authentification inter-serveurs
- * Vérifie que la requête vient bien de l'autre serveur
- */
-function authenticateReplication(req, res, next) {
-  try {
-    const authHeader = req.headers['x-replication-auth'];
-    
-    if (!authHeader) {
-      return res.status(401).json({ error: 'Missing replication authentication' });
-    }
-
-    // Vérifier le secret partagé
-    if (authHeader !== config.REPLICATION_SECRET) {
-      return res.status(403).json({ error: 'Invalid replication credentials' });
-    }
-
-    next();
-  } catch (err) {
-    res.status(500).json({ error: 'Replication authentication failed' });
-  }
-}
-
-/**
- * Calculer le checksum d'une note pour vérifier l'intégrité
- */
-function calculateChecksum(note) {
-  const data = JSON.stringify({
-    id: note.id,
-    ownerId: note.ownerId,
-    title: note.title,
-    content: note.content,
-    updatedAt: note.updatedAt
-  });
-  
-  return crypto.createHash('sha256').update(data).digest('hex');
-}
-
-/**
- * ENDPOINT: POST /sync
- * Reçoit les données de réplication du serveur pair
- * 
- * Body attendu:
- * {
- *   "action": "create" | "update" | "delete",
- *   "note": { ... },
- *   "checksum": "hash_sha256"
- * }
- */
-app.post('/sync', authenticateReplication, async (req, res) => {
-  try {
-    const { action, note, checksum } = req.body;
-
-    // Validation basique
-    if (!action || !note) {
-      return res.status(400).json({ error: 'Missing action or note data' });
-    }
-
-    // Vérification d'intégrité avec checksum
-    if (checksum) {
-      const calculatedChecksum = calculateChecksum(note);
-      if (calculatedChecksum !== checksum) {
-        console.error(' Checksum mismatch - potential data corruption');
-        return res.status(400).json({ error: 'Integrity check failed' });
-      }
-    }
-
-    // Exécuter l'action de réplication
-    switch (action) {
-      case 'create':
-        // Créer la note sur ce serveur
-        noteService.createNote(
-          config.DATA_DIR,
-          note.ownerId,
-          note.id,
-          note.title,
-          note.content
-        );
-        console.log(` Replicated CREATE: ${note.id}`);
-        break;
-
-      case 'update':
-        // Mettre à jour la note
-        noteService.updateNote(
-          config.DATA_DIR,
-          note.ownerId,
-          note.id,
-          note.content
-        );
-        console.log(` Replicated UPDATE: ${note.id}`);
-        break;
-
-      case 'delete':
-        // Supprimer la note
-        noteService.deleteNote(
-          config.DATA_DIR,
-          note.ownerId,
-          note.id
-        );
-        console.log(`Replicated DELETE: ${note.id}`);
-        break;
-
-      default:
-        return res.status(400).json({ error: 'Invalid action' });
-    }
-
-    res.json({ 
-      success: true, 
-      message: `Replication ${action} completed`,
-      checksum: checksum 
-    });
-
-  } catch (err) {
-    console.error(' Replication error:', err.message);
-    res.status(500).json({ 
-      error: 'Replication failed',
-      details: err.message 
-    });
-  }
-});
-
-/**
- * ENDPOINT: GET /health
- * Healthcheck pour vérifier que le serveur est opérationnel
- */
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'healthy',
-    server: 'B',
-    timestamp: new Date().toISOString()
+// endpoint /sync redirigé vers /replication/sync
+app.post('/sync', (req, res) => {
+  res.status(301).json({
+    message: 'Endpoint moved',
+    newUrl: '/replication/sync'
   });
 });
 
-// Démarrage du serveur
-app.listen(config.PORT, () => {
-  console.log(` Server B running on port ${config.PORT}`);
-  console.log(` Replication endpoint: POST /sync`);
-  console.log(` Data directory: ${config.DATA_DIR}`);
+// ERROR HANDLING
+app.use(errorHandler);
+
+// DÉMARRAGE DU SERVEUR
+let server;
+if (httpsOptions) {
+  server = https.createServer(httpsOptions, app);
+  server.listen(config.PORT, () => {
+    logger.info(`✅ Server B running on port ${config.PORT} (HTTPS)`);
+    logger.info(`📡 Replication endpoint: POST /replication/sync`);
+    logger.info(`❤️  Health check: GET /replication/health`);
+    logger.info(`📁 Data directory: ${config.DATA_DIR}`);
+  });
+} else {
+  // Fallback to HTTP when TLS options are not available (dev convenience)
+  const http = await import('http');
+  server = http.createServer(app);
+  server.listen(config.PORT, () => {
+    logger.warn(`⚠️  TLS certs not found — Server B running on port ${config.PORT} (HTTP)`);
+    logger.info(`📡 Replication endpoint: POST /replication/sync`);
+    logger.info(`❤️  Health check: GET /replication/health`);
+    logger.info(`📁 Data directory: ${config.DATA_DIR}`);
+  });
+}
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received, shutting down gracefully');
+  tokenBlacklistService.stopAutoCleanup();
+  server.close(() => {
+    logger.info('Server closed');
+    process.exit(0);
+  });
 });
 
 export default app;

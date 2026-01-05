@@ -10,13 +10,15 @@ class User {
   }
 
   static async create(id, email, password) {
-    if (!email || !password) throw new InvalidInputError('Email and password required');
+    if (!email || !password) {
+      throw new InvalidInputError('Email and password required');
+    }
     const hashed = await hashPassword(password);
     return new User(id, email, hashed);
   }
 
   async verifyPassword(password) {
-    return await verifyPassword(password, this.passwordHash);
+    return verifyPassword(password, this.passwordHash);
   }
 }
 
