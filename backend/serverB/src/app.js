@@ -31,7 +31,7 @@ import errorHandler from '../../shared/middlewares/error.middleware.js';
 
 // Services
 import { createReplicationService } from './services/replication.service.js';
-import { tokenBlacklistService } from './services/tokenBlacklist.service.js';
+import { tokenBlacklistService } from '../../shared/services/tokenBlacklist.service.js';
 
 
 // Valider au chargement

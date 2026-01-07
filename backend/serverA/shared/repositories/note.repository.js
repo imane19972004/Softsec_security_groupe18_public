@@ -119,35 +119,21 @@ export function createNoteRepository(DATA_DIR) {
   }
 
   function update(userId, noteId, content) {
-    const data = findById(noteId);
-    if (!data) throw new InvalidInputError('Note not found');
-
-    const isOwner = data.ownerId === userId;
-    const shared = data.sharedWith?.find(s => s.userId === userId);
-
-    if (!isOwner) {
-      if (!shared || shared.permission !== 'write') {
-        throw new AuthError('Read-only access');
-      }
-    }
+    const data = get(userId, noteId);
+    if (data.ownerId !== userId) throw new AuthError('Forbidden');
 
     const note = Object.assign(new Note(), data);
-    note.updateContent(content, userId);
+    note.updateContent(content);
 
-    fs.writeFileSync(notePath(data.ownerId, noteId),
-      encryptForStorage(JSON.stringify(note))
-    );
-
+    fs.writeFileSync(notePath(userId, noteId), encryptForStorage(JSON.stringify(note)));
     return note;
   }
 
-
   function remove(userId, noteId) {
-    const data = findById(noteId);
-    if (!data) throw new InvalidInputError('Not found');
+    const data = get(userId, noteId);
     if (data.ownerId !== userId) throw new AuthError('Forbidden');
 
-    fs.unlinkSync(notePath(data.ownerId, noteId));
+    fs.unlinkSync(notePath(userId, noteId));
   }
 
   function share(userId, noteId, recipientId, permission = 'read', recipientEmail) {

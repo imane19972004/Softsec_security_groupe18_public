@@ -1,9 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { createNoteRepository } from '../repositories/note.repository.js';
-import { validateNoteContent } from '../utils/validation.js';
-import { AuthError, InvalidInputError } from '../utils/errors.js';
-import Note from '../models/note.js';
-
+import { AuthError } from '../utils/errors.js';
 
 export default function createNoteService(DATA_DIR) {
   const repo = createNoteRepository(DATA_DIR);
@@ -22,10 +19,7 @@ export default function createNoteService(DATA_DIR) {
     getNote: (userId, noteId) => {
       // Try owner lookup first
       try {
-        const note = repo.get(userId, noteId);
-        note._access = 'owner';
-        note.currentUserId = userId;
-        return note;
+        return repo.get(userId, noteId);
       } catch (e) {
         // not found in user's folder -> search globally
         if (repo.findById) {
@@ -33,60 +27,23 @@ export default function createNoteService(DATA_DIR) {
           if (!note) throw e;
           // if user is owner, already handled; check sharedWith
           const shared = Array.isArray(note.sharedWith) && note.sharedWith.find(s => s.userId === userId);
-          if (shared) {
-            note._access = shared.permission; // 'read' ou 'write'
-            note.currentUserId = userId;
-            return note;
-          }
+          if (shared) return note;
           // otherwise forbidden
           throw new AuthError('Forbidden');
         }
         throw e;
       }
     },
-
-    createNote: (userId, title, content) => {
-      if (!validateNoteContent(content)) {
-        throw new InvalidInputError('Invalid note content');
-      }
-      return repo.create(userId, uuidv4(), title, content);
-    },
-
-    updateNote: (userId, noteId, content) => {
-      if (!validateNoteContent(content)) {
-        throw new InvalidInputError('Invalid note content');
-      }
-      return repo.update(userId, noteId, content);
-    },
+    
+    createNote: (userId, title, content) =>
+      repo.create(userId, uuidv4(), title, content),
+    
+    updateNote: (userId, noteId, content) =>
+      repo.update(userId, noteId, content),
     
     deleteNote: (userId, noteId) =>
       repo.remove(userId, noteId),
-
-    lockNote: (userId, noteId) => {
-      const note = repo.findById(noteId);
-      if (!note) throw new InvalidInputError('Not found');
-
-      const isOwner = note.ownerId === userId;
-      const shared = note.sharedWith?.find(s => s.userId === userId);
-
-      if (!isOwner && (!shared || shared.permission !== 'write')) {
-        throw new AuthError('Forbidden');
-      }
-
-      const n = Object.assign(new Note(), note);
-      n.lock(userId);
-      repo.replicateFull(n);
-      return n;
-    },
-
-    unlockNote: (userId, noteId) => {
-      const note = repo.findById(noteId);
-      const n = Object.assign(new Note(), note);
-      n.unlock(userId);
-      repo.replicateFull(n);
-      return n;
-    },
-
+    
     replicateCreate: (note) => repo.replicateFull(note),
     replicateUpdate: (note) => repo.replicateFull(note),
     replicateDelete: (note) => repo.remove(note.ownerId, note.id),

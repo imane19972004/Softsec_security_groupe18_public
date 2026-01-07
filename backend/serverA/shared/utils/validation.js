@@ -13,8 +13,4 @@ function validateNoteTitle(title) {
   return typeof title === 'string' && title.length > 0 && title.length <= 100;
 }
 
-function validateNoteContent(content) {
-  return typeof content === 'string' && content.length <= 10000;
-}
-
-export { validateEmail, validatePassword, validateNoteTitle, validateNoteContent };
+export { validateEmail, validatePassword, validateNoteTitle };

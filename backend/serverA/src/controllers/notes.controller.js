@@ -1,6 +1,8 @@
+// backend/serverA/src/controllers/notes.controller.js
 import ReplicationService from '../../../shared/services/replicationService.js';
 import createNoteService from '../../../shared/services/note.service.js';
 import { createUserRepository } from '../../../shared/repositories/user.repository.js';
+import { AuthError } from '../../../shared/utils/errors.js';
 import config from '../config.js';
 
 const noteService = createNoteService(config.DATA_DIR);
@@ -19,8 +21,13 @@ function list(req, res, next) {
 
 function get(req, res, next) {
   try {
-    res.json(noteService.getNote(req.user.id, req.params.id));
+    const note = noteService.getNote(req.user.id, req.params.id);
+    res.json(note);
   } catch (err) {
+    // Si c'est une AuthError, retourner 403 au lieu de 400
+    if (err instanceof AuthError) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     next(err);
   }
 }
@@ -42,6 +49,9 @@ function update(req, res, next) {
     replicationService.replicateNoteUpdate(note);
     res.json(note);
   } catch (err) {
+    if (err instanceof AuthError) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     next(err);
   }
 }
@@ -53,6 +63,9 @@ function remove(req, res, next) {
     replicationService.replicateNoteDelete(note);
     res.status(204).end();
   } catch (err) {
+    if (err instanceof AuthError) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     next(err);
   }
 }
@@ -71,6 +84,9 @@ async function share(req, res, next) {
     replicationService.replicateNoteUpdate(note);
     res.json({ message: 'Note shared' });
   } catch (err) {
+    if (err instanceof AuthError) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
     next(err);
   }
 }
@@ -92,6 +108,29 @@ async function unshare(req, res, next) {
     replicationService.replicateNoteUpdate(note);
     res.json({ message: 'Share removed' });
   } catch (err) {
+    if (err instanceof AuthError) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    next(err);
+  }
+}
+
+function lock(req, res, next) {
+  try {
+    const note = noteService.lockNote(req.user.id, req.params.id);
+    replicationService.replicateNoteUpdate(note);
+    res.json(note);
+  } catch (err) {
+    next(err);
+  }
+}
+
+function unlock(req, res, next) {
+  try {
+    const note = noteService.unlockNote(req.user.id, req.params.id);
+    replicationService.replicateNoteUpdate(note);
+    res.json(note);
+  } catch (err) {
     next(err);
   }
 }
@@ -109,4 +148,8 @@ async function replicationStatus(req, res, next) {
   }
 }
 
-export default { list, get, create, update, remove, share, unshare, replicationStatus };
+
+
+
+export default { list, get, create, update, remove, share, unshare, lock, unlock, replicationStatus };
+

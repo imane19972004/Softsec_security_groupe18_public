@@ -9,7 +9,7 @@
  * utiliser Redis ou une base de données.
  */
 
-import { logger } from '../../../shared/config/logger.js';
+import { logger } from '../config/index.js';
 
 export class TokenBlacklistService {
   constructor() {
