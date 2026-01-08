@@ -11,6 +11,6 @@ export default function errorHandler(err, req, res, next) {
   logger.error(logMessage);
 
   res.status(status).json({
-    error: err.message || 'Internal server error'
+    message: err.message || 'Internal server error'
   });
 }

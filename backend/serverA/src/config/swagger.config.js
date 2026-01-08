@@ -24,8 +24,8 @@ const options = {
         - Logs d'audit complets
       `,
       contact: {
-        name: 'Groupe 18 - Softsec',
-        email: 'security@example.com'
+        name: 'Groupe 18 - Software security project',
+        email: 'rajaa.tchani@etu.unice.fr'
       },
       license: {
         name: 'ISC',
@@ -33,11 +33,11 @@ const options = {
     },
     servers: [
       {
-        url: 'https://localhost:3001',
+        url: 'http://localhost:3001',
         description: 'Server A (Development)'
       },
       {
-        url: 'https://localhost:3002',
+        url: 'http://localhost:3002',
         description: 'Server B (Replica)'
       }
     ],
