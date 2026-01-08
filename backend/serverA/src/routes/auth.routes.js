@@ -1,5 +1,10 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
+
+import { v4 as uuidv4 } from 'uuid';
+import { generateToken } from '../../../shared/utils/crypto.js';
+import userService from '../../../shared/services/userService.js';
+import { validateRegister, validateLogin } from '../validators/authValidators.js';
 import authController from '../controllers/auth.controller.js';
 
 const router = express.Router();
@@ -86,4 +91,11 @@ router.post('/register', authController.register);
  */
 router.post('/login', loginLimiter, authController.login);
 
+
 export default router;
+
+
+
+//router.post('/register', authController.register);
+//router.post('/login', authController.login);
+

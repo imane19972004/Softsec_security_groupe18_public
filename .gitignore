@@ -5,6 +5,13 @@ dist/
 *.tmp
 .DS_Store
 coverage/
+# Runtime data (DO NOT COMMIT)
+backend/data/
+backend/serverA/users/users.json
+
+# Env
+.env
+
 **/certs/
 backend/**/data/
 backend/serverA/data/

@@ -59,7 +59,7 @@ const app = express();
 // MIDDLEWARES DE SÉCURITÉ
 app.use(helmet());
 app.use(cors({ origin: config.FRONTEND_ORIGIN }));
-app.use(express.json({ limit: '10kb' }));
+app.use(express.json({ limit: '30kb' }));
 app.use(hpp());
 app.use(
   rateLimit({
