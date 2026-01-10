@@ -1,11 +1,4 @@
-﻿/**
- * Server B - Application Entry Point
- * 
- * Serveur de réplication sécurisée pour notes
- * Synchronise les données avec Server A
- */
-// Charger les variables d'environnement avant tout
-import dotenv from 'dotenv';
+﻿import dotenv from 'dotenv';
 dotenv.config();
 
 import https from 'https';
@@ -14,16 +7,19 @@ import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import hpp from 'hpp';
+import cookieParser from 'cookie-parser';
 
-// Configuration et services
 import config from './config.js';
 import { httpsOptions, logger } from '../../shared/config/index.js';
 import createNoteService from '../../shared/services/note.service.js';
 import { createUserRepository } from '../../shared/repositories/user.repository.js';
+import ReplicationService from '../../shared/services/replicationService.js';
 
-// Controllers et routes
+// Controllers & routes
 import { createReplicationController } from './controllers/replication.controller.js';
 import { createReplicationRoutes } from './routes/replication.routes.js';
+import authRoutes from './routes/auth.routes.js';
+import notesRoutes from './routes/notes.routes.js';
 
 // Middlewares
 import { replicationAuthMiddleware } from './middlewares/replicationAuth.middleware.js';
@@ -33,97 +29,144 @@ import errorHandler from '../../shared/middlewares/error.middleware.js';
 import { createReplicationService } from './services/replication.service.js';
 import { tokenBlacklistService } from '../../shared/services/tokenBlacklist.service.js';
 
-
-// Valider au chargement
+// Validate environment variables
 config.validateEnvironment();
 
-// Initialiser les services
+// Initialize services
 const noteService = createNoteService(config.DATA_DIR);
 const userRepository = createUserRepository(config.DATA_DIR);
 
 const userService = {
-  replicateCreate: (user) => userRepository.replicateUser(user)
+  replicateCreate: (user) => userRepository.replicateUser(user),
+  replicateUpdate: (user) => userRepository.replicateUpdate(user),
 };
 
-const replicationService = createReplicationService(noteService, userService);
+// Bidirectional replication service instance
+const replicationServiceBidirectional = new ReplicationService(
+  config.PEER_SERVER_URL,
+  config.REPLICATION_SECRET,
+  config.DATA_DIR,
+  'B'
+);
 
+replicationServiceBidirectional.startQueueProcessing(5000);
+
+const replicationService = createReplicationService(noteService, userService);
 const replicationController = createReplicationController(replicationService);
 const replicationAuthMiddlewareInstance = replicationAuthMiddleware(config);
 
-// Démarrer la blacklist automatique des tokens
-tokenBlacklistService.startAutoCleanup(60 * 60 * 1000); // Toutes les heures
+// Token blacklist cleanup
+tokenBlacklistService.startAutoCleanup(60 * 60 * 1000);
 
-// Créer l'application Express
+// Initialize Express app
 const app = express();
 
-// MIDDLEWARES DE SÉCURITÉ
+// Security middlewares
 app.use(helmet());
-app.use(cors({ origin: config.FRONTEND_ORIGIN }));
-app.use(express.json({ limit: '30kb' }));
+
+// CORS configuration
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'https://localhost:3000',
+      config.FRONTEND_ORIGIN,
+    ];
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      logger.warn(`[CORS] Blocked origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['set-cookie'],
+};
+
+app.use(cors(corsOptions));
+app.use(cookieParser());
+app.use(express.json({ limit: '10kb' }));
 app.use(hpp());
+
 app.use(
   rateLimit({
     windowMs: config.RATE_LIMIT_WINDOW,
-    max: config.RATE_LIMIT_MAX
+    max: config.RATE_LIMIT_MAX,
   })
 );
 
-// Logger les requêtes entrantes
+// Request logging middleware
 app.use((req, res, next) => {
-  const loggedUrl = req.originalUrl.split('?')[0];
-  logger.info(`${req.method} ${loggedUrl}`);
+  logger.info(`${req.method} ${req.originalUrl.split('?')[0]}`);
   next();
 });
 
-// ROUTES
+// Routes
 app.get('/', (req, res) => {
-  res.send('Server B - Secure Notes API (Replica)');
+  res.json({
+    message: 'Server B - Secure Notes API (Autonomous)',
+    version: '2.0.0',
+    capabilities: ['auth', 'notes', 'replication'],
+    replication: replicationServiceBidirectional.getStats(),
+  });
 });
 
-// Routes de réplication
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    server: 'B',
+    timestamp: new Date().toISOString(),
+    replication: replicationServiceBidirectional.getStats(),
+  });
+});
+
+app.use('/auth', authRoutes);
+app.use('/notes', notesRoutes);
+
+// Replication routes (incoming from Server A)
 const replicationRoutes = createReplicationRoutes(
   replicationController,
   replicationAuthMiddlewareInstance
 );
 app.use('/replication', replicationRoutes);
 
-// endpoint /sync redirigé vers /replication/sync
-app.post('/sync', (req, res) => {
-  res.status(301).json({
-    message: 'Endpoint moved',
-    newUrl: '/replication/sync'
-  });
-});
-
-// ERROR HANDLING
+// Error handling middleware
 app.use(errorHandler);
 
-// DÉMARRAGE DU SERVEUR
+// Start HTTPS or HTTP server based on configuration
 let server;
+
 if (httpsOptions) {
   server = https.createServer(httpsOptions, app);
   server.listen(config.PORT, () => {
-    logger.info(`✅ Server B running on port ${config.PORT} (HTTPS)`);
-    logger.info(`📡 Replication endpoint: POST /replication/sync`);
-    logger.info(`❤️  Health check: GET /replication/health`);
-    logger.info(`📁 Data directory: ${config.DATA_DIR}`);
+    logger.info(`✅ Server B running (HTTPS) on port ${config.PORT}`);
+    logger.info(`🔐 Auth endpoints: /auth`);
+    logger.info(`📝 Notes endpoints: /notes`);
+    logger.info(`🔄 Replication endpoint: /replication`);
   });
 } else {
-  // Fallback to HTTP when TLS options are not available (dev convenience)
   const http = await import('http');
   server = http.createServer(app);
   server.listen(config.PORT, () => {
-    logger.warn(`⚠️  TLS certs not found — Server B running on port ${config.PORT} (HTTP)`);
-    logger.info(`📡 Replication endpoint: POST /replication/sync`);
-    logger.info(`❤️  Health check: GET /replication/health`);
-    logger.info(`📁 Data directory: ${config.DATA_DIR}`);
+    logger.warn(`⚠️ HTTPS disabled — running HTTP on port ${config.PORT}`);
+    logger.info(`🔐 Auth endpoints: /auth`);
+    logger.info(`📝 Notes endpoints: /notes`);
+    logger.info(`🔄 Replication endpoint: /replication`);
   });
 }
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully');
+
   tokenBlacklistService.stopAutoCleanup();
+  replicationServiceBidirectional.stopQueueProcessing();
+
   server.close(() => {
     logger.info('Server closed');
     process.exit(0);

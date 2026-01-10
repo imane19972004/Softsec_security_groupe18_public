@@ -2,30 +2,108 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Your Notes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Notes - Secure Notes</title>
+  
+  <!-- CSS -->
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/search-filter.css">
+  
+  <!-- External Libraries -->
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+  
+  <!-- Core Scripts -->
+  <script src="js/failover.service.js" defer></script>
   <script src="js/api.service.js" defer></script>
   <script src="js/utils.js" defer></script>
+  <script src="js/notifications.js" defer></script>
+  <script src="js/global-actions.js" defer></script>
+  <script src="js/auth.js" defer></script>
+  
+  <!-- Feature Scripts -->
+  <script src="js/search-filter.js" defer></script>
   <script src="js/notes.js" defer></script>
 </head>
 <body>
   <div class="container">
+    <!-- Header -->
     <div class="header">
-      <h1>Your Notes</h1>
+      <h1>📝 Your Notes</h1>
       <div class="header-actions">
-        <button class="btn-primary" onclick="window.location='edit.html'">+ New Note</button>
-        <button class="btn-secondary" onclick="logout()">Logout</button>
+        <button class="btn-primary" onclick="window.location='edit.html'">
+          ✨ New Note
+        </button>
+        <button class="btn-secondary" onclick="logout()">
+          👋 Logout
+        </button>
       </div>
     </div>
 
+    <!-- Search and Filter Section -->
+    <div class="search-section">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input 
+          type="text" 
+          id="searchInput" 
+          placeholder="Search your notes..." 
+          oninput="filterNotes()"
+          aria-label="Search notes"
+        >
+        <button 
+          class="clear-search" 
+          id="clearSearch" 
+          onclick="clearSearch()"
+          aria-label="Clear search"
+        >
+          ✕
+        </button>
+      </div>
+      
+      <div class="filter-row">
+        <button 
+          class="filter-btn active" 
+          data-filter="all" 
+          onclick="setFilter('all')"
+        >
+          All Notes
+        </button>
+        <button 
+          class="filter-btn" 
+          data-filter="owned" 
+          onclick="setFilter('owned')"
+        >
+          My Notes
+        </button>
+        <button 
+          class="filter-btn" 
+          data-filter="shared" 
+          onclick="setFilter('shared')"
+        >
+          Shared with me
+        </button>
+      </div>
+    </div>
+
+    <!-- Error Message -->
     <div id="error" class="error-message"></div>
     
-    <div id="loadingSpinner" class="loading" style="display:none;">Loading notes...</div>
+    <!-- Loading Spinner -->
+    <div id="loadingSpinner" class="loading" style="display:none;">
+      Loading your notes
+    </div>
     
+    <!-- Notes Container -->
     <div id="notesContainer">
+      <div class="notes-count" id="notesCount"></div>
       <ul id="notesList" class="notes-list"></ul>
+      <div id="emptySearch" class="empty-search" style="display:none;">
+        <p><strong>No notes found</strong></p>
+        <p style="color: var(--gray-600); margin-top: 8px;">
+          Try adjusting your search or filter
+        </p>
+      </div>
     </div>
   </div>
 </body>

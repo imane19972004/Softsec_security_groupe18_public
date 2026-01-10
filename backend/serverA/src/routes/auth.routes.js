@@ -1,101 +1,99 @@
+// backend/serverA/src/routes/auth.routes.js
+
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-
-import { v4 as uuidv4 } from 'uuid';
-import { generateToken } from '../../../shared/utils/crypto.js';
-import userService from '../../../shared/services/userService.js';
-import { validateRegister, validateLogin } from '../validators/authValidators.js';
 import authController from '../controllers/auth.controller.js';
 
 const router = express.Router();
 
+// Rate limiter STRICT pour login
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 tentatives max
-  message: "Too many login attempts, please try again later."
+  max: 5, // MAXIMUM 5 tentatives par 15 minutes
+  message: { error: 'Too many login attempts. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false
 });
 
-
-//Annoter les routes d'authentification
+// Rate limiter pour register
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 heure
+  max: 3, // 3 comptes maximum par heure
+  message: { error: 'Too many accounts created. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 /**
  * @swagger
  * /auth/register:
  *   post:
  *     summary: Créer un nouveau compte utilisateur
- *     description: |
- *       Inscription d'un nouvel utilisateur avec validation stricte.
- *       
- *       **Contraintes de sécurité**:
- *       - Email valide requis
- *       - Mot de passe: minimum 8 caractères, 1 majuscule, 1 minuscule, 1 chiffre
- *       - Hash bcrypt avec 12 rounds
- *       - Détection des comptes existants
  *     tags: [Authentication]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/RegisterRequest'
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
+ *                 minLength: 8
  *     responses:
  *       201:
- *         description: Compte créé avec succès
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 email:
- *                   type: string
- *                   format: email
- *             example:
- *               email: user@example.com
+ *         description: Compte créé
  *       400:
- *         $ref: '#/components/responses/ValidationError'
+ *         description: Validation error
  *       429:
- *         $ref: '#/components/responses/RateLimitError'
+ *         description: Too many requests
  */
-router.post('/register', authController.register);
+router.post('/register', registerLimiter, authController.register);
+
 /**
  * @swagger
  * /auth/login:
  *   post:
- *     summary: Se connecter et obtenir un token JWT
- *     description: |
- *       Authentification avec email et mot de passe.
- *       
- *       **Sécurité**:
- *       - Rate limiting: 100 tentatives par 15 minutes
- *       - Token JWT valide 1 heure
- *       - Protection contre brute force
- *       - Aucune énumération des comptes (messages génériques)
+ *     summary: Se connecter
+ *     description: Rate limiting STRICT - 5 tentatives max par 15 minutes
  *     tags: [Authentication]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/LoginRequest'
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *               password:
+ *                 type: string
  *     responses:
  *       200:
  *         description: Connexion réussie
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/LoginResponse'
  *       401:
- *         $ref: '#/components/responses/UnauthorizedError'
+ *         description: Invalid credentials
  *       429:
- *         $ref: '#/components/responses/RateLimitError'
+ *         description: Too many login attempts
  */
 router.post('/login', loginLimiter, authController.login);
-
 
 export default router;
 
 
 
-//router.post('/register', authController.register);
-//router.post('/login', authController.login);
+
+
+
+
+
 

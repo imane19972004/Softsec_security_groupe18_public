@@ -32,6 +32,10 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 
 ### 2. Installation
 ```bash
+# Backend - Shared
+cd backend/shared
+npm install
+
 # Backend - Server A
 cd backend/serverA
 npm install
@@ -80,58 +84,77 @@ REPLICATION_SECRET            # Auth inter-serveurs
 - ✅ Erreur immédiate si variables manquantes
 - ✅ Documentation complète
 
-## 📡 Endpoints Clés
+## 🔐 Génération des Certificats HTTPS
 
-### Server A (Authentification)
+Les certificats TLS sont requis pour HTTPS. Générez-les avant de démarrer:
+
+### Linux/macOS:
 ```bash
-POST   /auth/register       # Créer un compte
-POST   /auth/login          # Se connecter
-GET    /notes               # Lister les notes
-POST   /notes               # Créer une note
+chmod +x scripts/generate-certs.sh
+./scripts/generate-certs.sh
 ```
 
-### Server B (Réplication)
+### Vérification:
 ```bash
-POST   /replication/sync    # Synchroniser les données
-GET    /replication/health  # Healthcheck
+ls backend/shared/certs/
+# Devrait afficher: cert.pem, key.pem
 ```
 
-## 🧪 Tests
+## 🩺 Vérification de Santé
 
-### Healthcheck
+### Tester Server A:
 ```bash
-# Server A
-curl https://localhost:3001 -k
-
-# Server B
-curl https://localhost:3002/replication/health -k
+curl -k https://localhost:3001/health
+# Réponse attendue: {"status":"healthy","server":"A",...}
 ```
 
-## 👥 Groupe 18
-
-### Replication verification checklist
-
-1. Create a note on Server A (replace tokens/user ids as needed):
-
+### Tester Server B:
 ```bash
-curl -k -X POST https://localhost:3001/notes \
-	-H "Authorization: Bearer <ACCESS_TOKEN>" \
-	-H "Content-Type: application/json" \
-	-d '{"title":"smoke","content":"replication test"}'
+curl -k https://localhost:3002/health
+# Réponse attendue: {"status":"healthy","server":"B",...}
 ```
 
-2. Verify peer health on Server B:
-
+### Tester la réplication:
 ```bash
-curl -k https://localhost:3002/replication/health
+curl -k https://localhost:3001/notes/system/replication-status \
+  -H "Authorization: Bearer <YOUR_TOKEN>"
 ```
 
-3. Confirm the peer received the note:
-- If Server B exposes a notes API: `GET https://localhost:3002/notes` (or the per-user endpoint)
-- Otherwise inspect the data directory on Server B (e.g. `backend/serverB/data/notes/<userId>/`) to find the replicated note file.
+## 🐛 Troubleshooting
 
-4. Update the note on Server A and verify the update appears on Server B (repeat step 1 with `PUT /notes/:id`).
+### Erreur: "MISSING_ENV_VARS"
+**Cause:** Fichier `.env` manquant ou incomplet
 
-5. Delete the note on Server A and verify it is removed on Server B.
+**Solution:**
+1. Copier `.env.example` vers `.env` à la racine de chaque serveur.
+2. Générer les secrets (voir section Configuration)
+3. Redémarrer les serveurs
 
-Run these steps as a smoke test after starting both servers to ensure replication is operating.
+### Erreur: "HTTPS certificates not found"
+**Cause:** Certificats TLS manquants
+
+**Solution:**
+```bash
+./scripts/generate-certs.sh
+```
+
+### Erreur: "Port already in use"
+**Cause:** Un autre processus utilise le port
+
+**Solution:**
+```bash
+# Linux/macOS
+lsof -ti:3001 | xargs kill -9
+
+# Windows
+netstat -ano | findstr :3001
+taskkill /PID <PID> /F
+```
+
+### Erreur: "Cannot connect to peer server"
+**Cause:** Server B n'est pas démarré ou réplication mal configurée
+
+**Solution:**
+1. Vérifier que Server B est démarré: `curl -k https://localhost:3002/health`
+2. Vérifier `PEER_SERVER_URL` dans `.env`
+3. Vérifier `REPLICATION_SECRET` identique sur les deux serveurs

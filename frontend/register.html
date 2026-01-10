@@ -6,8 +6,11 @@
   <link rel="stylesheet" href="css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+  <script src="js/failover.service.js" defer></script>
   <script src="js/api.service.js" defer></script>
   <script src="js/utils.js" defer></script>
+  <script src="js/notifications.js" defer></script>
+  <script src="js/global-actions.js" defer></script>
   <script src="js/auth.js" defer></script>
 </head>
 <body>
@@ -21,15 +24,34 @@
           <label for="email">Email</label>
           <input type="email" id="email" placeholder="your@email.com" required>
         </div>
+
         <div class="form-group">
           <label for="password">Password</label>
-          <input type="password" id="password" placeholder="Create a strong password" required>
+          <input
+            type="password"
+            id="password"
+            placeholder="Create a strong password"
+            required
+          >
+
+          <!-- RÈGLES ALIGNÉES BACKEND -->
+          <ul id="passwordRules" class="password-rules">
+            <li data-rule="length">At least 8 characters</li>
+            <li data-rule="uppercase">At least one uppercase letter (A–Z)</li>
+            <li data-rule="number">At least one number (0–9)</li>
+          </ul>
         </div>
-        <button type="submit" class="btn-primary">Register</button>
+
+        <button type="submit" id="registerBtn" class="btn-primary">
+          Register
+        </button>
       </form>
 
       <div id="error" class="error-message"></div>
-      <p class="auth-link">Already have an account? <a href="index.html">Login here</a></p>
+      <p class="auth-link">
+        Already have an account?
+        <a href="index.html">Login here</a>
+      </p>
     </div>
   </div>
 </body>

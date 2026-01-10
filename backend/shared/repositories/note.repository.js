@@ -74,7 +74,10 @@ export function createNoteRepository(DATA_DIR) {
     if (!fs.existsSync(NOTES_DIR)) return [];
 
     const results = [];
-    const users = fs.readdirSync(NOTES_DIR, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name);
+    const users = fs.readdirSync(NOTES_DIR, { withFileTypes: true })
+                    .filter(d => d.isDirectory())
+                    .map(d => d.name);
+
     for (const u of users) {
       const dir = path.join(NOTES_DIR, u);
       const files = fs.readdirSync(dir).filter(f => f.endsWith('.enc'));
@@ -82,9 +85,8 @@ export function createNoteRepository(DATA_DIR) {
         try {
           const encrypted = fs.readFileSync(path.join(dir, f), 'utf-8');
           const note = JSON.parse(decryptFromStorage(encrypted));
-          if (note.ownerId === userId) {
-            results.push(note);
-          } else if (Array.isArray(note.sharedWith) && note.sharedWith.find(s => s.userId === userId)) {
+          if (note.ownerId !== userId && Array.isArray(note.sharedWith) &&
+              note.sharedWith.find(s => s.userId === userId)) {
             results.push(note);
           }
         } catch {

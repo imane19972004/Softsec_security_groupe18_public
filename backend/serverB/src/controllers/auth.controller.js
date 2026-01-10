@@ -1,4 +1,3 @@
-// backend/serverA/src/controllers/auth.controller.js (COOKIE FIX)
 import createAuthService from '../../../shared/services/auth.service.js';
 import ReplicationService from '../../../shared/services/replicationService.js';
 import { tokenBlacklistService } from '../../../shared/services/tokenBlacklist.service.js';
@@ -11,7 +10,7 @@ const replicationService = new ReplicationService(
   config.PEER_SERVER_URL,
   config.REPLICATION_SECRET,
   config.DATA_DIR,
-  'A' // ServerA
+  'B' // ServerB
 );
 
 /**
@@ -28,17 +27,12 @@ async function register(req, res, next) {
 
     const user = await authService.register(email, password);
 
-    // FIX: Sérialiser la date pour la réplication
-    const userPayload = {
+    // Répliquer vers ServerB
+    await replicationService.replicateUserCreate({
       id: user.id,
       email: user.email,
-      createdAt: user.createdAt instanceof Date 
-        ? user.createdAt.toISOString() 
-        : user.createdAt
-    };
-
-    // Répliquer vers ServerB
-    await replicationService.replicateUserCreate(userPayload);
+      createdAt: user.createdAt
+    });
     
     logger.info(`[ServerA:Auth] User registered: ${email}`);
     res.status(201).json({ email: user.email });
@@ -62,22 +56,18 @@ async function login(req, res, next) {
 
     const token = await authService.login(email, password);
     
-    // FIX: Cookie settings optimized for development HTTPS
-    const cookieOptions = {
-      httpOnly: true,        // Protection XSS
-      secure: true,          // HTTPS only (now that frontend is HTTPS)
-      sameSite: 'none',      // Allow cross-origin (frontend port 3000 → backend port 3001)
-      maxAge: 60 * 60 * 1000, // 1 heure
-      path: '/'              // Available on all paths
-    };
-
-    res.cookie('authToken', token, cookieOptions);
+    // Définir le cookie HttpOnly sécurisé
+    res.cookie('authToken', token, {
+      httpOnly: true, // Inaccessible via JavaScript
+      secure: process.env.NODE_ENV === 'production', // HTTPS uniquement en prod
+      sameSite: 'strict', // Protection CSRF
+      maxAge: 60 * 60 * 1000 // 1 heure
+    });
 
     logger.info(`[ServerA:Auth] User logged in: ${email}`);
-    logger.info(`[ServerA:Auth] Cookie set with options: ${JSON.stringify(cookieOptions)}`);
     
     res.json({ 
-      token, // For backward compatibility
+      token,
       message: 'Login successful',
       server: 'A'
     });
@@ -116,12 +106,11 @@ async function logout(req, res, next) {
       }
     }
 
-    // Supprimer le cookie avec les mêmes options
+    // Supprimer le cookie
     res.clearCookie('authToken', {
       httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      path: '/'
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict'
     });
 
     logger.info('[ServerA:Auth] User logged out');
@@ -160,10 +149,9 @@ async function refresh(req, res, next) {
     // Définir le nouveau cookie
     res.cookie('authToken', newToken, {
       httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      maxAge: 60 * 60 * 1000,
-      path: '/'
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 60 * 60 * 1000
     });
 
     logger.info(`[ServerA:Auth] Token refreshed for user: ${decoded.email}`);

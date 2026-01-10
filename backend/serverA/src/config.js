@@ -29,7 +29,7 @@ function validateEnvironment() {
 
 export default {
   PORT: Number(process.env.PORT_A) || 3001,  
-  FRONTEND_ORIGIN: process.env.FRONTEND_ORIGIN || 'http://localhost:3000',
+  FRONTEND_ORIGIN: process.env.FRONTEND_ORIGIN || 'https://localhost:3000',
   
   // Limiteur de taux
   RATE_LIMIT_WINDOW: 15 * 60 * 1000,

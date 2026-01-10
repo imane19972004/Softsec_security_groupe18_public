@@ -35,7 +35,7 @@ export default {
   PORT: Number(process.env.PORT_B) || 3002,
   
   // CORS et sécurité
-  FRONTEND_ORIGIN: process.env.FRONTEND_ORIGIN || 'http://localhost:3000',
+  FRONTEND_ORIGIN: process.env.FRONTEND_ORIGIN || 'https://localhost:3000',
   
   // Limiteur de taux
   RATE_LIMIT_WINDOW: 15 * 60 * 1000,

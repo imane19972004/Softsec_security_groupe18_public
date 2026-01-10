@@ -1,3 +1,5 @@
+// backend/serverB/src/services/replication.service.js (MODIFIÉ)
+
 /**
  * Replication Service
  * 
@@ -54,17 +56,21 @@ export function createReplicationService(noteService, userService) {
 
         case 'user':
           logger.info(
-            `[Replication] User replication | email=${payload.email}`
+            `[Replication] User replication | action=${action} email=${payload.email}`
           );
 
-          if (action !== 'create') {
+          // ✅ Support pour user create ET update
+          if (action === 'create') {
+            userService.replicateCreate(payload);
+          } else if (action === 'update') {
+            // ✅ NOUVEAU: Gestion de la mise à jour utilisateur
+            userService.replicateUpdate(payload);
+          } else {
             logger.warn(
               `[Replication] Unsupported user action: ${action}`
             );
-            throw new Error('User replication only supports create');
+            throw new Error(`Unsupported user action: ${action}`);
           }
-
-          userService.replicateCreate(payload);
           break;
 
         default:

@@ -1,100 +1,227 @@
 import { v4 as uuidv4 } from 'uuid';
 import { createNoteRepository } from '../repositories/note.repository.js';
+import { createUserRepository } from '../repositories/user.repository.js';
 import { validateNoteContent } from '../utils/validation.js';
 import { AuthError, InvalidInputError } from '../utils/errors.js';
 import Note from '../models/note.js';
 
+const VALID_PERMISSIONS = ['read', 'write'];
 
 export default function createNoteService(DATA_DIR) {
-  const repo = createNoteRepository(DATA_DIR);
+  const noteRepo = createNoteRepository(DATA_DIR);
+  const userRepo = createUserRepository(DATA_DIR);
 
-  return {
-    listNotes: (userId) => {
-      // Return owned notes plus notes shared with the user (deduplicated)
-      const owned = repo.list(userId) || [];
-      const accessible = repo.listAccessible ? repo.listAccessible(userId) : [];
-      const map = new Map();
-      accessible.forEach(n => map.set(n.id, n));
-      owned.forEach(n => map.set(n.id, n));
-      return Array.from(map.values());
-    },
+  function getAccessForUser(note, userId) {
+    if (!note || !userId) return 'read';
 
-    getNote: (userId, noteId) => {
-      // Try owner lookup first
-      try {
-        const note = repo.get(userId, noteId);
-        note._access = 'owner';
-        note.currentUserId = userId;
-        return note;
-      } catch (e) {
-        // not found in user's folder -> search globally
-        if (repo.findById) {
-          const note = repo.findById(noteId);
-          if (!note) throw e;
-          // if user is owner, already handled; check sharedWith
-          const shared = Array.isArray(note.sharedWith) && note.sharedWith.find(s => s.userId === userId);
-          if (shared) {
-            note._access = shared.permission; // 'read' ou 'write'
-            note.currentUserId = userId;
-            return note;
-          }
-          // otherwise forbidden
+    if (note.ownerId === userId) {
+      return 'owner';
+    }
+
+    const shared = (note.sharedWith || []).find((s) => s.userId === userId);
+    if (!shared) {
+      return 'read';
+    }
+
+    return shared.permission === 'write' ? 'write' : 'read';
+  }
+
+  async function getUserNotesWithAccess(userId) {
+    // on utilise list + listAccessible pour rester aligné avec le repo
+    const owned = noteRepo.list(userId) || [];
+    const accessible = noteRepo.listAccessible ? noteRepo.listAccessible(userId) : [];
+    const map = new Map();
+
+    [...owned, ...accessible].forEach((n) => {
+      map.set(n.id, {
+        ...n,
+        access: getAccessForUser(n, userId),
+        currentUserId: userId
+      });
+    });
+
+    return Array.from(map.values());
+  }
+
+  async function listNotes(userId) {
+    // renvoie déjà enrichi avec access/currentUserId
+    return getUserNotesWithAccess(userId);
+  }
+
+  async function getNote(userId, noteId) {
+    // d'abord: dossier du user (owner)
+    try {
+      const note = noteRepo.get(userId, noteId);
+      return {
+        ...note,
+        currentUserId: userId,
+        access: getAccessForUser(note, userId)
+      };
+    } catch (e) {
+      // pas dans le dossier -> chercher globalement
+      if (noteRepo.findById) {
+        const note = noteRepo.findById(noteId);
+        if (!note) throw e;
+
+        const access = getAccessForUser(note, userId);
+        if (access === 'read' && note.ownerId !== userId) {
+          // note non partagée avec cet user
           throw new AuthError('Forbidden');
         }
-        throw e;
+
+        note.currentUserId = userId;
+        note.access = access;
+        return note;
       }
-    },
+      throw e;
+    }
+  }
 
-    createNote: (userId, title, content) => {
-      if (!validateNoteContent(content)) {
-        throw new InvalidInputError('Invalid note content');
-      }
-      return repo.create(userId, uuidv4(), title, content);
-    },
+  async function createNote(userId, title, content) {
+    if (!validateNoteContent(content)) {
+      throw new InvalidInputError('Invalid note content');
+    }
 
-    updateNote: (userId, noteId, content) => {
-      if (!validateNoteContent(content)) {
-        throw new InvalidInputError('Invalid note content');
-      }
-      return repo.update(userId, noteId, content);
-    },
-    
-    deleteNote: (userId, noteId) =>
-      repo.remove(userId, noteId),
+    const noteId = uuidv4();
+    const note = noteRepo.create(userId, noteId, title, content);
 
-    lockNote: (userId, noteId) => {
-      const note = repo.findById(noteId);
-      if (!note) throw new InvalidInputError('Not found');
+    // mettre à jour le user (myNotes)
+    const owner = await userRepo.getUserById(userId);
+    if (owner && owner.addOwnedNote) {
+      owner.addOwnedNote(noteId);
+      await userRepo.update(owner);
+    }
 
-      const isOwner = note.ownerId === userId;
-      const shared = note.sharedWith?.find(s => s.userId === userId);
+    return note;
+  }
 
-      if (!isOwner && (!shared || shared.permission !== 'write')) {
-        throw new AuthError('Forbidden');
-      }
+  async function updateNote(userId, noteId, content) {
+    if (!validateNoteContent(content)) {
+      throw new InvalidInputError('Invalid note content');
+    }
+    return noteRepo.update(userId, noteId, content);
+  }
 
-      const n = Object.assign(new Note(), note);
-      n.lock(userId);
-      repo.replicateFull(n);
-      return n;
-    },
+  async function deleteNote(userId, noteId) {
+    const note = noteRepo.findById(noteId);
+    if (!note) throw new InvalidInputError('Not found');
+    if (note.ownerId !== userId) throw new AuthError('Forbidden');
 
-    unlockNote: (userId, noteId) => {
-      const note = repo.findById(noteId);
-      const n = Object.assign(new Note(), note);
-      n.unlock(userId);
-      repo.replicateFull(n);
-      return n;
-    },
+    await noteRepo.remove(userId, noteId);
 
-    replicateCreate: (note) => repo.replicateFull(note),
-    replicateUpdate: (note) => repo.replicateFull(note),
-    replicateDelete: (note) => repo.remove(note.ownerId, note.id),
-    
-    shareNote: (ownerId, noteId, recipientId, permission = 'read', recipientEmail) =>
-      repo.share(ownerId, noteId, recipientId, permission, recipientEmail),
+    // mettre à jour myNotes / notesSharedWithMe
+    const owner = await userRepo.getUserById(userId);
+    if (owner && owner.removeOwnedNote) {
+      owner.removeOwnedNote(noteId);
+      await userRepo.update(owner);
+    }
 
-    unshareNote: (ownerId, noteId, recipientIdOrEmail) =>
-      repo.unshare(ownerId, noteId, recipientIdOrEmail),
+    return;
+  }
+
+  async function shareNote({ noteId, ownerId, recipientUserId, permission }) {
+    if (!VALID_PERMISSIONS.includes(permission)) {
+      throw new InvalidInputError('Invalid permission');
+    }
+
+    const note = noteRepo.findById(noteId);
+    if (!note) {
+      throw new InvalidInputError('Resource not found');
+    }
+    if (note.ownerId !== ownerId) {
+      throw new AuthError('Not allowed to share this note');
+    }
+
+    note.sharedWith = note.sharedWith || [];
+    const existing = note.sharedWith.find((s) => s.userId === recipientUserId);
+    if (existing) {
+      existing.permission = permission;
+    } else {
+      note.sharedWith.push({ userId: recipientUserId, permission });
+    }
+
+    noteRepo.replicateFull(note);
+
+    const recipient = await userRepo.getUserById(recipientUserId);
+    if (recipient && recipient.addSharedNote) {
+      recipient.addSharedNote(noteId);
+      await userRepo.update(recipient);
+    }
+
+    return note;
+  }
+
+  async function unshareNote({ noteId, ownerId, recipientUserId }) {
+    const note = noteRepo.findById(noteId);
+    if (!note) throw new InvalidInputError('Note not found');
+    if (note.ownerId !== ownerId) throw new AuthError('Not allowed to unshare this note');
+
+    note.sharedWith = (note.sharedWith || []).filter((s) => s.userId !== recipientUserId);
+    noteRepo.replicateFull(note);
+
+    const recipient = await userRepo.getUserById(recipientUserId);
+    if (recipient && recipient.removeSharedNote) {
+      recipient.removeSharedNote(noteId);
+      await userRepo.update(recipient);
+    }
+
+    return note;
+  }
+
+  async function lockNote(userId, noteId) {
+    const note = noteRepo.findById(noteId);
+    if (!note) throw new InvalidInputError('Note not found');
+
+    const isOwner = note.ownerId === userId;
+    const shared = note.sharedWith?.find((s) => s.userId === userId);
+
+    if (!isOwner && (!shared || shared.permission !== 'write')) {
+      throw new AuthError('Forbidden');
+    }
+
+    const n = Object.assign(new Note(), note);
+    n.lock(userId);
+    noteRepo.replicateFull(n);
+    return n;
+  }
+
+  async function unlockNote(userId, noteId) {
+    const note = noteRepo.findById(noteId);
+    if (!note) throw new InvalidInputError('Note not found');
+
+    const n = Object.assign(new Note(), note);
+    n.unlock(userId);
+    noteRepo.replicateFull(n);
+    return n;
+  }
+
+  // hooks de réplication utilisés par ReplicationService
+  async function replicateCreate(note) {
+    return noteRepo.replicateFull(note);
+  }
+
+  async function replicateUpdate(note) {
+    return noteRepo.replicateFull(note);
+  }
+
+  async function replicateDelete(note) {
+    return noteRepo.remove(note.ownerId, note.id);
+  }
+
+  return {
+    listNotes,
+    getNote,
+    createNote,
+    updateNote,
+    deleteNote,
+    shareNote,
+    unshareNote,
+    lockNote,
+    unlockNote,
+    replicateCreate,
+    replicateUpdate,
+    replicateDelete,
+    getAccessForUser,
+    getUserNotesWithAccess
   };
 }

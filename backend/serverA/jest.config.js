@@ -3,6 +3,7 @@ export default {
   testEnvironment: 'node',
   testMatch: ['**/__tests__/**/*.test.js'],
   testTimeout: 10000,
+    setupFilesAfterEnv: ['<rootDir>/jest.setup.js'], 
   collectCoverageFrom: [
     'src/**/*.js',
     '!src/**/*.test.js',

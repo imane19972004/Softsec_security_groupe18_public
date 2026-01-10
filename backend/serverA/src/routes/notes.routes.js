@@ -1,89 +1,54 @@
 import express from 'express';
-import { v4 as uuidv4 } from 'uuid';
-import noteService from '../../../shared/services/noteService.js';
-import { verifyToken } from '../../../shared/utils/crypto.js';
-import ReplicationService from '../../../shared/services/replicationService.js';
-import { 
-  validateCreateNote, 
-  validateUpdateNote, 
-  validateNoteId 
-} from '../validators/noteValidators.js';
-
-import config from '../config.js';
 import auth from '../../../shared/middlewares/auth.middleware.js';
 import notesController from '../controllers/notes.controller.js';
+import { validateCreateNote, validateUpdateNote, validateNoteId, createShareValidators, createLockValidators } from '../../../shared/validators/index.js';
+import config from '../config.js';
 
-import { validateShare } from '../middlewares/validation.middleware.js';
-
+const validateShare = createShareValidators(config.DATA_DIR);
+const validateLock = createLockValidators(config.DATA_DIR);
 
 const router = express.Router();
 
+/**
+ * Toutes les routes notes sont protégées
+ */
 router.use(auth);
 
-
-
-//Annoter les routes de notes
-
-
-// System
 /**
- * @swagger
- * /notes/system/replication-status:
- *   get:
- *     summary: Vérifier l'état de la réplication
- *     description: Retourne l'état de santé du serveur pair et de la réplication
- *     tags: [System]
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: État de la réplication
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 peerServer:
- *                   type: string
- *                   example: 'https://localhost:3002'
- *                 status:
- *                   type: string
- *                   enum: [connected, disconnected]
- *                 details:
- *                   type: object
- *       401:
- *         $ref: '#/components/responses/UnauthorizedError'
+ * SYSTEM — Replication status
  */
 router.get('/system/replication-status', notesController.replicationStatus);
 
-// CRUD
+/**
+ * NOTES CRUD
+ */
+
 /**
  * @swagger
  * /notes:
  *   get:
- *     summary: Lister toutes les notes de l'utilisateur
- *     description: |
- *       Retourne toutes les notes dont l'utilisateur est propriétaire 
- *       ou qui ont été partagées avec lui.
- *       
- *       **Sécurité**:
- *       - Authentification JWT requise
- *       - Isolation stricte par utilisateur
- *       - Données déchiffrées à la volée
+ *     summary: retrieve all notes for the authenticated user
  *     tags: [Notes]
- *     security:
- *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Liste des notes
+ *         description: list of notes
  *         content:
  *           application/json:
  *             schema:
  *               type: array
  *               items:
  *                 $ref: '#/components/schemas/Note'
- *       401:
- *         $ref: '#/components/responses/UnauthorizedError'
+ *         example:
+ *           - id: note-uuid
+ *             title: Sample Note
+ *             content: This is a sample note content.
+ *             ownerId: user-uuid
+ *             createdAt: 2024-01-01T12:00:00Z
+ *             updatedAt: 2024-01-02T12:00:00Z
+ *             sharedWith:
+ *               - user2-uuid
+ *               - user3-uuid
+ *             locked: false
  */
 router.get('/', notesController.list);
 
@@ -91,16 +56,8 @@ router.get('/', notesController.list);
  * @swagger
  * /notes/{id}:
  *   get:
- *     summary: Récupérer une note spécifique
- *     description: |
- *       Récupère les détails d'une note par son ID.
- *       
- *       **Autorisation**:
- *       - Propriétaire de la note
- *       - Utilisateur avec qui la note est partagée (read/write)
+ *     summary: retrieve a specific note by ID
  *     tags: [Notes]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -108,38 +65,27 @@ router.get('/', notesController.list);
  *         schema:
  *           type: string
  *           format: uuid
- *         description: ID unique de la note
+ *         description: The note ID
  *     responses:
  *       200:
- *         description: Détails de la note
+ *         description: note object
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Note'
- *       401:
- *         $ref: '#/components/responses/UnauthorizedError'
  *       403:
  *         $ref: '#/components/responses/ForbiddenError'
- *       400:
+ *       404:
  *         $ref: '#/components/responses/NotFoundError'
  */
-router.get('/:id', notesController.get);
+router.get('/:id', validateNoteId, notesController.get);
+
 /**
  * @swagger
  * /notes:
  *   post:
- *     summary: Créer une nouvelle note
- *     description: |
- *       Crée une note chiffrée appartenant à l'utilisateur authentifié.
- *       
- *       **Sécurité**:
- *       - Validation stricte du titre (max 100 caractères)
- *       - Sanitization XSS du contenu
- *       - Chiffrement AES-256-GCM au repos
- *       - Réplication automatique vers Server B
+ *     summary: create a new note
  *     tags: [Notes]
- *     security:
- *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -148,139 +94,24 @@ router.get('/:id', notesController.get);
  *             $ref: '#/components/schemas/CreateNoteRequest'
  *     responses:
  *       201:
- *         description: Note créée avec succès
+ *         description: note created successfully
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Note'
  *       400:
  *         $ref: '#/components/responses/ValidationError'
- *       401:
- *         $ref: '#/components/responses/UnauthorizedError'
- */
-router.post('/', notesController.create);
-/**
- * @swagger
- * /notes/{id}/share:
- *   post:
- *     summary: Partager une note avec un utilisateur
- *     description: |
- *       Partage une note avec un autre utilisateur en spécifiant le niveau de permission.
- *       
- *       **Permissions**:
- *       - `read`: L'utilisateur peut lire la note
- *       - `write`: L'utilisateur peut lire et modifier la note
- *       
- *       **Sécurité**:
- *       - Validation de l'existence du destinataire
- *       - Logs d'audit du partage
- *       - Notification de réplication
- *     tags: [Sharing]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/ShareNoteRequest'
- *     responses:
- *       200:
- *         description: Note partagée avec succès
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: 'Note shared'
- *       400:
- *         $ref: '#/components/responses/ValidationError'
- *       401:
- *         $ref: '#/components/responses/UnauthorizedError'
- *       403:
- *         $ref: '#/components/responses/ForbiddenError'
- *       404:
- *         description: Destinataire non trouvé
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: 'Recipient not found'
- */
-router.post('/:id/share', notesController.share);
-router.post('/:id/lock', notesController.lock);
-router.post('/:id/unlock', notesController.unlock);
-/**
- * @swagger
- * /notes/{id}/share:
- *   delete:
- *     summary: Révoquer le partage d'une note
- *     description: |
- *       Retire l'accès d'un utilisateur à une note partagée.
- *       
- *       **Autorisation**:
- *       - Seul le propriétaire peut révoquer un partage
- *     tags: [Sharing]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/UnshareNoteRequest'
- *     responses:
- *       200:
- *         description: Partage révoqué
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 message:
- *                   type: string
- *                   example: 'Share removed'
- *       400:
- *         $ref: '#/components/responses/ValidationError'
- *       401:
- *         $ref: '#/components/responses/UnauthorizedError'
  *       403:
  *         $ref: '#/components/responses/ForbiddenError'
  */
-router.delete('/:id/share', notesController.unshare);
+router.post('/', validateCreateNote, notesController.create);
+
 /**
  * @swagger
  * /notes/{id}:
  *   put:
- *     summary: Modifier une note existante
- *     description: |
- *       Met à jour le contenu d'une note.
- *       
- *       **Autorisation**:
- *       - Seul le propriétaire peut modifier
- *       - Les utilisateurs avec permission 'write' peuvent aussi modifier
+ *     summary: update an existing note
  *     tags: [Notes]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -288,6 +119,7 @@ router.delete('/:id/share', notesController.unshare);
  *         schema:
  *           type: string
  *           format: uuid
+ *         description: The note ID
  *     requestBody:
  *       required: true
  *       content:
@@ -296,33 +128,26 @@ router.delete('/:id/share', notesController.unshare);
  *             $ref: '#/components/schemas/UpdateNoteRequest'
  *     responses:
  *       200:
- *         description: Note mise à jour
+ *         description: note updated successfully
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Note'
  *       400:
- *         $ref: '#/components/responses/NotFoundError'
- *       401:
- *         $ref: '#/components/responses/UnauthorizedError'
+ *         $ref: '#/components/responses/ValidationError'
  *       403:
  *         $ref: '#/components/responses/ForbiddenError'
+ *       404:
+ *         $ref: '#/components/responses/NotFoundError'
  */
-router.put('/:id', notesController.update);
+router.put('/:id', validateUpdateNote, notesController.update);
+
 /**
  * @swagger
  * /notes/{id}:
  *   delete:
- *     summary: Supprimer une note
- *     description: |
- *       Supprime définitivement une note.
- *       
- *       **Autorisation**:
- *       - Seul le propriétaire peut supprimer
- *       - Réplication automatique de la suppression
+ *     summary: delete a note by ID
  *     tags: [Notes]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -330,117 +155,85 @@ router.put('/:id', notesController.update);
  *         schema:
  *           type: string
  *           format: uuid
+ *         description: The note ID
  *     responses:
  *       204:
- *         description: Note supprimée avec succès
- *       400:
- *         $ref: '#/components/responses/NotFoundError'
- *       401:
- *         $ref: '#/components/responses/UnauthorizedError'
+ *         description: note deleted successfully
  *       403:
  *         $ref: '#/components/responses/ForbiddenError'
+ *       404:
+ *         $ref: '#/components/responses/NotFoundError'
  */
-router.delete('/:id', notesController.remove);
+router.delete('/:id', validateNoteId, notesController.remove);
 
-router.post('/:id/share', validateShare, notesController.share);
+/**
+ * @swagger
+ * /notes/{id}/share:
+ *   post:
+ *     summary: share a note with another user
+ *     tags: [Notes]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The note ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ShareNoteRequest'
+ *     responses:
+ *       200:
+ *         description: note shared successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Note'
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ *       404:
+ *         $ref: '#/components/responses/NotFoundError'
+ */
+router.post('/:id/share', validateNoteId, validateShare, notesController.share);
 
+/**
+ * @swagger
+ * /notes/{id}/share:
+ *   delete:
+ *     summary: unshare a note from a user
+ *     tags: [Notes]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: The note ID
+ *     responses:
+ *       200:
+ *         description: note unshared successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Note'
+ *       403:
+ *         $ref: '#/components/responses/ForbiddenError'
+ *       404:
+ *         $ref: '#/components/responses/NotFoundError'
+ */
+router.delete('/:id/share', validateNoteId, notesController.unshare);
 
-// Middleware to authenticate requests
-function auth(req, res, next) {
-  try {
-    const header = req.headers.authorization;
-    if (!header || !header.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-    const token = header.split(' ')[1];
-    req.user = verifyToken(token);
-    next();
-  } catch (err) {
-    res.status(401).json({ error: 'Unauthorized' });
-  }
-}
-
-// CRUD routes for notes avec validation 
-
-//liste toutes les notes
-router.get('/', auth, (req, res) => {
-  res.json(noteService.listNotes(config.DATA_DIR, req.user.id));
-});
-
-router.get('/:id', auth, validateNoteId,(req, res) => {
-  try {
-    res.json(noteService.getNote(config.DATA_DIR, req.user.id, req.params.id));
-  } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
-  }
-});
-
-
-// Crée une nouvelle note avec validation
-router.post('/', auth,validateCreateNote, (req, res) => {
-  try {
-    const note = noteService.createNote(
-      config.DATA_DIR,
-      req.user.id,
-      uuidv4(),
-      req.body.title,
-      req.body.content
-    );
-
-    // Répliquer vers l'autre serveur (asynchrone, non-bloquant)
-    replicationService.replicateCreate(note)
-      .catch(err => console.error('Replication warning:', err.message));
-
-    res.status(201).json(note);
-  } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
-  }
-});
-
-// Met à jour une note avec validation
-router.put('/:id', auth,validateUpdateNote, (req, res) => {
-  try {
-    // Vérifier la longueur du contenu
-    const MAX_CONTENT_LENGTH = 10000; // on peut ajuster la limite
-    if (req.body.content.length > MAX_CONTENT_LENGTH) {
-      return res.status(400).json({ error: `Validation: content too long (max ${MAX_CONTENT_LENGTH} chars)` });
-    }
-    // Mettre à jour localement
-    const note = noteService.updateNote(
-      config.DATA_DIR, 
-      req.user.id, 
-      req.params.id, 
-      req.body.content
-    );
-
-    // Répliquer la modification (asynchrone)
-    replicationService.replicateUpdate(note)
-      .catch(err => console.error('Replication warning:', err.message));
-
-    res.json(note);
-  } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
-  }
-});
-
-// Supprime une note avec validation
-router.delete('/:id', auth, validateNoteId,(req, res) => {
-  try {
-    noteService.deleteNote(config.DATA_DIR, req.user.id, req.params.id);
-    res.status(204).end();
-  } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
-  }
-});
-
-// Endpoint pour vérifier la santé de la réplication
-router.get('/system/replication-status', auth, async (req, res) => {
-  const health = await replicationService.checkPeerHealth();
-  res.json({
-    peerServer: process.env.PEER_SERVER_URL || 'http://localhost:3002',
-    status: health.healthy ? 'connected' : 'disconnected',
-    details: health
-  });
-});
+/**
+ * LOCKING
+ */
+router.post('/:id/lock', validateLock, notesController.lock);
+router.post('/:id/unlock', validateLock, notesController.unlock);
 
 export default router;
